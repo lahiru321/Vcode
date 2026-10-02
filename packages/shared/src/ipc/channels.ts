@@ -2,7 +2,15 @@
 // without bundling the schemas. contracts.ts checks that every name here has a contract.
 
 /** Request/response channels (renderer → main, `ipcRenderer.invoke`). */
-export const INVOKE_CHANNELS = ['app:getInfo'] as const;
+export const INVOKE_CHANNELS = [
+  'app:getInfo',
+  'projects:list',
+  'projects:get',
+  'projects:create',
+  'projects:update',
+  'projects:delete',
+  'dialog:pickFolder',
+] as const;
 
 /** Push channels (main → renderer, `webContents.send`). */
 export const EVENT_CHANNELS = ['app:notice'] as const;

@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P1 — Foundation
 
 **Next up:**
-1. `P1-10` Projects service + IPC
-2. `P1-11` Native folder picker
-3. `P1-12` Projects UI
+1. `P1-12` Projects UI
+2. `P1-13` App settings + window state
+3. `P1-14` Logging
 
 ---
 
@@ -93,8 +93,10 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-02:* better-sqlite3 13 + drizzle-orm 0.45 / drizzle-kit 0.31. Schema in `src/main/db/schema.ts`; enum values in `packages/shared/src/domain.ts` (for reuse in zod contracts). Additions beyond the ER diagram: `created_at` on repositories/workspaces, `updated_at` on agents/credentials, unique `projects.slug` / `projects.root_path` / `workspaces.path` / `credentials.name` / (project, workspace name), FK indexes. Deletes: a project cascades to repos, workspaces, its agents and sessions; audit logs keep the row with `project_id = null`; a deleted credential sets `agents.credential_id = null`. DB at `userData/vcode.db` = `%APPDATA%\Vcode\` (set `productName` so the folder name is stable). WAL, `synchronous=NORMAL`, `busy_timeout=5000`, FKs on. Migrations run with FKs off (SQLite ignores that pragma inside the migrator's transaction), then `foreign_key_check`, then FKs on. `build/copy-migrations.ts` copies migrations into `out/main/migrations`. If the DB can't open, the app shows an error dialog and exits. Schema change → `pnpm db:generate` → commit the SQL.
 - [x] **P1-09** · Native module rebuild for Electron (better-sqlite3 now, node-pty in P2) · `S`
   - *2026-10-02:* Not needed for better-sqlite3: v13 ships prebuilt **Node-API** binaries (`prebuilds/win32-x64.node`, `darwin-arm64`, …) that load unchanged in Node 24 and Electron 44, so Vitest can use the same install. No `@electron/rebuild`. Check node-pty in P2-01 (if it isn't Node-API, add `@electron/rebuild` then). P8: native `.node` files must be `asarUnpack`ed.
-- [ ] **P1-10** · Projects service + IPC: list / create / get / update / delete · `S`
-- [ ] **P1-11** · Native folder picker; path validation (`realpath`, exists, is a folder); detect Git repo + default branch · `S`
+- [x] **P1-10** · Projects service + IPC: list / create / get / update / delete · `S`
+  - *2026-10-02:* `src/main/projects/service.ts` + `ipc/projects.ts`; contracts `Project`, `CreateProjectRequest` (`rootPath`, optional `name` → defaults to the folder name), `UpdateProjectRequest` (`name` and/or `status`; folder and slug never change), `ProjectIdRequest`. Request schemas are `z.strictObject` (unknown keys rejected). Slug from the name, made unique with `-2`, `-3`, …. List is sorted by name, case-insensitive. Delete removes DB rows only (cascades), never files. Errors: `INVALID_REQUEST` (bad folder / input), `CONFLICT` (folder already a project), `NOT_FOUND`. Not yet: refusing delete while terminals run (P2-07).
+- [x] **P1-11** · Native folder picker; path validation (`realpath`, exists, is a folder); detect Git repo + default branch · `S`
+  - *2026-10-02:* `dialog:pickFolder` (modal to the calling window; `{ path: null }` on cancel). `src/main/fs/folders.ts` `resolveExistingFolder`: absolute only, `realpath` (true casing + junctions resolved, so the same folder can't be added twice), must be a folder, not a drive root. `src/main/git/detect.ts` reads `.git` files directly (no `git` process, so nothing from the repo's config runs): default branch = `origin/HEAD` target, else the checked-out branch; handles linked worktrees (`.git` file + `commondir`). Only a repo **root** is detected, not a subfolder of a repo. Verified end-to-end through `window.vcode` in the built app, including restart persistence. The real native dialog still needs a manual click-through (P1-12).
 - [ ] **P1-12** · Projects UI: sidebar list, create / edit / delete, empty state · `M`
 - [ ] **P1-13** · App settings store (`app_settings`) + window size/position persistence · `S`
 - [ ] **P1-14** · Logging with pino → `userData/logs` · `S`
