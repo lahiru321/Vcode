@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P1 — Foundation
 
 **Next up:**
-1. `P1-07` Platform layer
-2. `P1-08` SQLite + Drizzle
-3. `P1-09` Native module rebuild
+1. `P1-08` SQLite + Drizzle
+2. `P1-09` Native module rebuild
+3. `P1-10` Projects service + IPC
 
 ---
 
@@ -87,7 +87,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-02:* `src/main/security.ts`: global `app.enableSandbox()`, all navigation/redirects/new windows/webviews blocked, http(s) links open in the system browser after a confirm dialog, all browser permissions denied. CSP injected by `build/csp.ts` (strict in production; dev also allows inline scripts + HMR WebSocket). DevTools disabled when packaged; renderer warnings/errors print to the dev terminal.
 - [x] **P1-06** · Typed IPC: zod contracts in `packages/shared`, preload exposes `window.agentHub`, main handler registry checks sender + validates payload · `M`
   - *2026-10-02:* zod 4. Channel names in `shared/src/ipc/channels.ts` (zod-free, so the preload bundle stays ~1 kB); schemas in `contracts.ts`. `window.agentHub` = `invoke(channel, payload?)` + `on(event, listener) → unsubscribe`, allowlisted. Main `handle()` (`src/main/ipc/registry.ts`) rejects senders that aren't the main frame of our window showing our UI, validates request **and** response (unknown response keys stripped), and returns a `{ ok, data | error: { code, message } }` envelope; renderer `invoke()` in `lib/ipc.ts` unwraps it and throws `IpcError`. Handlers throw `IpcError('NOT_FOUND', …)` for domain errors. Startup fails if a channel has no handler. First channel: `app:getInfo` (status bar); first event: `app:notice`. Adding a channel: name in `channels.ts` → schemas in `contracts.ts` → `handle()` in a `src/main/ipc/<module>.ts` registered from `ipc/index.ts`.
-- [ ] **P1-07** · Platform layer: interface + `win32.ts` + `darwin.ts` stub (`defaultShell`, `resolveExecutable`, `killProcessTree`, `loadUserEnvironment`, `revealInFileManager`); lint rule banning `process.platform` elsewhere · `M`
+- [x] **P1-07** · Platform layer: interface + `win32.ts` + `darwin.ts` stub (`defaultShell`, `resolveExecutable`, `killProcessTree`, `loadUserEnvironment`, `revealInFileManager`); lint rule banning `process.platform` elsewhere · `M`
+  - *2026-10-02:* `src/main/platform/` → `platform` object (`index.ts` is the only `process.platform` check). Also has `shellArgs`, `buildCommand` and `fileManagerName`. **win32:** shell = `pwsh` on PATH, else Windows PowerShell. Executables come from PATH + PATHEXT (only .com/.exe/.bat/.cmd; .ps1 only when given as a path). The current directory is never searched; relative paths are refused; app execution aliases are found. `.cmd`/`.bat` run through `cmd.exe /d /s /c` with cross-spawn-style double `^` escaping; `Command.verbatimArguments` tells the PTY host not to re-quote. `killProcessTree` = `taskkill /T /F`. `loadUserEnvironment` reads the user + machine registry environment through Windows PowerShell (UTF-8, ~0.5 s, so cache it), with PATH = system;user. **darwin:** working but never run on a Mac: `$SHELL -l`, PATH lookup, SIGTERM → SIGKILL to the process group, `env -0` from an interactive login shell. ESLint bans `process.platform`, `os.platform` and importing `platform` from `os` outside this folder. Checked by hand on this machine: claude.exe / npm.cmd / npm.ps1 / app-alias resolution, 25 tricky arguments round-tripping through a `.cmd` shim, and tree kill of parent + grandchild.
 - [ ] **P1-08** · SQLite + Drizzle: all V1 tables (V1 doc §8), migrations at startup, WAL + foreign keys on, DB file in `userData` · `M`
 - [ ] **P1-09** · Native module rebuild for Electron (better-sqlite3 now, node-pty in P2) · `S`
 - [ ] **P1-10** · Projects service + IPC: list / create / get / update / delete · `S`
@@ -95,7 +96,7 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - [ ] **P1-12** · Projects UI: sidebar list, create / edit / delete, empty state · `M`
 - [ ] **P1-13** · App settings store (`app_settings`) + window size/position persistence · `S`
 - [ ] **P1-14** · Logging with pino → `userData/logs` · `S`
-- [ ] **P1-15** · Vitest + unit tests: platform layer, path validation, projects service, `isSafeExternalUrl`, IPC registry (sender check, request/response validation) · `M`
+- [ ] **P1-15** · Vitest + unit tests: platform layer (port the P1-07 manual checks: PATHEXT resolution, cmd.exe argument round-trip, tree kill, registry env merge), path validation, projects service, `isSafeExternalUrl`, IPC registry (sender check, request/response validation) · `M`
 - [ ] **P1-16** · GitHub Actions on `windows-latest` + `macos-latest`: lint, typecheck, unit tests · `S`
 
 **Done when:**

@@ -20,6 +20,30 @@ export default tseslint.config(
     },
   },
   {
+    // All OS differences go through apps/desktop/src/main/platform (V1 doc §6).
+    ignores: ['apps/desktop/src/main/platform/**'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        ...['process', 'os'].map((object) => ({
+          object,
+          property: 'platform',
+          message: 'Use the platform layer (src/main/platform) instead of branching on the OS.',
+        })),
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['os', 'node:os'].map((name) => ({
+            name,
+            importNames: ['platform'],
+            message: 'Use the platform layer (src/main/platform) instead of branching on the OS.',
+          })),
+        },
+      ],
+    },
+  },
+  {
     files: ['apps/desktop/src/renderer/**/*.{ts,tsx}'],
     ...reactHooks.configs.flat['recommended-latest'],
     languageOptions: {
