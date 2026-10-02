@@ -10,7 +10,8 @@ function createMainWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     title: APP_NAME,
-    backgroundColor: '#0b0d10',
+    // Matches the renderer's dark --background token to avoid a flash on load.
+    backgroundColor: '#0a0a0a',
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

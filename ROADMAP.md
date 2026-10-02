@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P1 — Foundation
 
 **Next up:**
-1. `P1-04` Tailwind + shadcn/ui app shell
-2. `P1-05` Electron security baseline
-3. `P1-06` Typed IPC
+1. `P1-05` Electron security baseline
+2. `P1-06` Typed IPC
+3. `P1-07` Platform layer
 
 ---
 
@@ -81,7 +81,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-02:* `apps/desktop` itself is created in P1-03. TypeScript pinned to `~6.0` because typescript-eslint doesn't support TS 7 yet.
 - [x] **P1-03** · Scaffold Electron + electron-vite + React + TypeScript in `apps/desktop` · `M`
   - *2026-10-02:* Electron 44.5 · electron-vite 5 · Vite 7 (electron-vite doesn't support Vite 8 yet) · React 19.3. Preload is sandboxed and fully bundled; workspace packages are bundled into main. Window opens via `pnpm dev`.
-- [ ] **P1-04** · Tailwind + shadcn/ui; app shell (sidebar + main area); dark theme · `M`
+- [x] **P1-04** · Tailwind + shadcn/ui; app shell (sidebar + main area); dark theme · `M`
+  - *2026-10-02:* Tailwind 4 + shadcn `new-york` (Radix, neutral, CSS variables) with extra `success` / `warning` tokens. Shell: sidebar (Projects / Agents / Workspaces), top bar, empty state, status bar. Buttons are placeholders until P1-12. Note: the shadcn CLI can't resolve the `@renderer` alias — after `shadcn add`, change `from "cn"` to `from '@renderer/lib/utils'` and remove the `cn` package if it was added.
 - [ ] **P1-05** · Electron security baseline: `contextIsolation`, `sandbox`, no `nodeIntegration`, strict CSP, block navigation and new windows · `S`
 - [ ] **P1-06** · Typed IPC: zod contracts in `packages/shared`, preload exposes `window.agentHub`, main handler registry checks sender + validates payload · `M`
 - [ ] **P1-07** · Platform layer: interface + `win32.ts` + `darwin.ts` stub (`defaultShell`, `resolveExecutable`, `killProcessTree`, `loadUserEnvironment`, `revealInFileManager`); lint rule banning `process.platform` elsewhere · `M`
