@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { APP_NAME } from '@agent-hub/shared';
+import { APP_NAME } from '@vcode/shared';
 import { Bot, FolderGit2, FolderPlus, Layers, Plus, Settings } from 'lucide-react';
 import { Button } from '@renderer/components/ui/button';
 import { ScrollArea } from '@renderer/components/ui/scroll-area';

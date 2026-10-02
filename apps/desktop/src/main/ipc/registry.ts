@@ -8,7 +8,7 @@ import {
   type InvokeChannel,
   type IpcErrorCode,
   type IpcResult,
-} from '@agent-hub/shared';
+} from '@vcode/shared';
 import { BrowserWindow, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { z } from 'zod';
 import { isRendererUrl } from '../renderer';

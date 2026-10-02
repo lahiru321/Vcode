@@ -1,4 +1,4 @@
-import type { AppInfo } from '@agent-hub/shared';
+import type { AppInfo } from '@vcode/shared';
 import { invoke } from '@renderer/lib/ipc';
 import { cn } from '@renderer/lib/utils';
 import { useEffect, useState } from 'react';

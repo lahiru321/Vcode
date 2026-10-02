@@ -1,7 +1,7 @@
-import type { AgentHubApi } from '../../preload';
+import type { VcodeApi } from '../../preload';
 
 declare global {
   interface Window {
-    agentHub: AgentHubApi;
+    vcode: VcodeApi;
   }
 }

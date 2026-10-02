@@ -31,7 +31,7 @@ export function contentSecurityPolicy(): Plugin {
   let isDev = false;
 
   return {
-    name: 'agent-hub:csp',
+    name: 'vcode:csp',
     configResolved(config) {
       isDev = config.command === 'serve';
     },

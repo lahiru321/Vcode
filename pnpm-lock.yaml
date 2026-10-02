@@ -35,7 +35,7 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@agent-hub/shared':
+      '@vcode/shared':
         specifier: workspace:^
         version: link:../../packages/shared
       better-sqlite3:

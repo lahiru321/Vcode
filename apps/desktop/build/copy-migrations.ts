@@ -8,7 +8,7 @@ import type { Plugin } from 'vite';
  */
 export function copyMigrations(source = resolve('src/main/db/migrations')): Plugin {
   return {
-    name: 'agent-hub:copy-migrations',
+    name: 'vcode:copy-migrations',
     writeBundle(options) {
       if (!options.dir) {
         throw new Error('copy-migrations: the main build has no output directory');

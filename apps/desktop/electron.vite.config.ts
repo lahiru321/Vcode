@@ -7,7 +7,7 @@ import { contentSecurityPolicy } from './build/csp';
 
 // Workspace packages ship TypeScript source, so main must bundle them instead of
 // leaving them as runtime require() calls.
-const workspacePackages = ['@agent-hub/shared', '@agent-hub/adapters'];
+const workspacePackages = ['@vcode/shared', '@vcode/adapters'];
 
 export default defineConfig({
   main: {

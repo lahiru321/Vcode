@@ -1,15 +1,15 @@
 {
-  "name": "agent-hub",
+  "name": "vcode",
   "private": true,
-  "description": "AI Agent Hub — desktop app for running multiple AI coding CLIs side by side",
+  "description": "Vcode — desktop app for running multiple AI coding CLIs side by side",
   "packageManager": "pnpm@9.15.4",
   "engines": {
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "pnpm --filter @agent-hub/desktop dev",
-    "build": "pnpm --filter @agent-hub/desktop build",
-    "db:generate": "pnpm --filter @agent-hub/desktop db:generate",
+    "dev": "pnpm --filter @vcode/desktop dev",
+    "build": "pnpm --filter @vcode/desktop build",
+    "db:generate": "pnpm --filter @vcode/desktop db:generate",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

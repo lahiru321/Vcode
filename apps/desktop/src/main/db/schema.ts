@@ -8,7 +8,7 @@ import {
   SESSION_STATUSES,
   WORKSPACE_KINDS,
   WORKSPACE_STATUSES,
-} from '@agent-hub/shared';
+} from '@vcode/shared';
 import { blob, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // V1 tables, as in the V1 doc §8 ER diagram. IDs are UUID text; timestamps are Unix epoch

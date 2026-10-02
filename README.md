@@ -1,4 +1,4 @@
-# AI Agent Hub
+# Vcode
 
 Desktop app (Windows first, macOS later) for running and managing multiple AI coding CLIs — Claude Code, Gemini CLI, Codex CLI — side by side.
 

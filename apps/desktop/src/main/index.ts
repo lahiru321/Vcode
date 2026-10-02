@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { APP_NAME } from '@agent-hub/shared';
+import { APP_NAME } from '@vcode/shared';
 import { app, BrowserWindow, dialog } from 'electron';
 import { closeDatabase, initDatabase } from './db';
 import { registerIpcHandlers } from './ipc';

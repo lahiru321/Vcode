@@ -1,5 +1,5 @@
 {
-  "name": "@agent-hub/adapters",
+  "name": "@vcode/adapters",
   "version": "0.0.0",
   "private": true,
   "type": "module",

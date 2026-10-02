@@ -5,14 +5,14 @@ import {
   type InvokeArgs,
   type InvokeChannel,
   type InvokeResponse,
-} from '@agent-hub/shared';
+} from '@vcode/shared';
 
 /** Calls a main-process handler. Throws IpcError (with its `code`) if the call fails. */
 export async function invoke<C extends InvokeChannel>(
   channel: C,
   ...args: InvokeArgs<C>
 ): Promise<InvokeResponse<C>> {
-  const result = await window.agentHub.invoke(channel, ...args);
+  const result = await window.vcode.invoke(channel, ...args);
   if (!result.ok) {
     throw new IpcError(result.error.code, result.error.message);
   }
@@ -24,5 +24,5 @@ export function onEvent<C extends EventChannel>(
   channel: C,
   listener: (payload: EventPayload<C>) => void,
 ): () => void {
-  return window.agentHub.on(channel, listener);
+  return window.vcode.on(channel, listener);
 }

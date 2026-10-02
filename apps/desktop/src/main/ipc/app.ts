@@ -1,4 +1,4 @@
-import { APP_NAME } from '@agent-hub/shared';
+import { APP_NAME } from '@vcode/shared';
 import { app } from 'electron';
 import { handle } from './registry';
 

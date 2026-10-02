@@ -1,10 +1,10 @@
-import type { EventPayload, InvokeArgs, InvokeResponse, IpcResult } from '@agent-hub/shared';
+import type { EventPayload, InvokeArgs, InvokeResponse, IpcResult } from '@vcode/shared';
 import {
   EVENT_CHANNELS,
   INVOKE_CHANNELS,
   type EventChannel,
   type InvokeChannel,
-} from '@agent-hub/shared/ipc/channels';
+} from '@vcode/shared/ipc/channels';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 // The only bridge between the sandboxed renderer and the main process. ipcRenderer itself is
@@ -42,6 +42,6 @@ const api = {
   },
 };
 
-export type AgentHubApi = typeof api;
+export type VcodeApi = typeof api;
 
-contextBridge.exposeInMainWorld('agentHub', api);
+contextBridge.exposeInMainWorld('vcode', api);

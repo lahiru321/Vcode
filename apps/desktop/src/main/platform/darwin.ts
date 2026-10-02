@@ -11,7 +11,7 @@ import type { Command, Environment, Executable, Platform } from './types';
 
 const KILL_GRACE_MS = 3_000;
 const ENV_TIMEOUT_MS = 10_000;
-const ENV_MARKER = '__AGENT_HUB_ENV__';
+const ENV_MARKER = '__VCODE_ENV__';
 
 async function isExecutableFile(path: string): Promise<boolean> {
   try {

@@ -1,9 +1,9 @@
 {
-  "name": "@agent-hub/desktop",
+  "name": "@vcode/desktop",
   "version": "0.1.0",
-  "productName": "AI Agent Hub",
+  "productName": "Vcode",
   "private": true,
-  "description": "AI Agent Hub desktop app",
+  "description": "Vcode desktop app",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -13,7 +13,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@agent-hub/shared": "workspace:^",
+    "@vcode/shared": "workspace:^",
     "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

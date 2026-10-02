@@ -50,7 +50,7 @@ export function initDatabase(userDataDir: string): AppDatabase {
   if (database) {
     throw new Error('Database already initialised');
   }
-  database = openDatabase(join(userDataDir, 'agent-hub.db'));
+  database = openDatabase(join(userDataDir, 'vcode.db'));
   return database;
 }
 
