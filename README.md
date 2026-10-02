@@ -15,7 +15,7 @@ Desktop app (Windows first, macOS later) for running and managing multiple AI co
 ## Repository layout
 
 ```
-apps/desktop/        Electron app (main, preload, pty-host, renderer)   — added in P1-03
+apps/desktop/        Electron app (main, preload, renderer; pty-host added in P2)
 packages/shared/     IPC contracts, schemas and shared types
 packages/adapters/   CLI agent adapters
 docs/                Product and architecture specs
@@ -26,6 +26,8 @@ docs/                Product and architecture specs
 | Command             | What it does                        |
 | ------------------- | ----------------------------------- |
 | `pnpm install`      | Install all workspace dependencies  |
+| `pnpm dev`          | Run the desktop app with hot reload |
+| `pnpm build`        | Production build into `apps/desktop/out` |
 | `pnpm lint`         | ESLint across the repo              |
 | `pnpm typecheck`    | TypeScript check in every package   |
 | `pnpm format`       | Format with Prettier                |

@@ -1,0 +1,40 @@
+/* Temporary styles — replaced by Tailwind + shadcn/ui in P1-04. */
+:root {
+  color-scheme: dark;
+  font-family: system-ui, 'Segoe UI', sans-serif;
+  background: #0b0d10;
+  color: #e6e8eb;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  display: grid;
+  place-content: center;
+  min-height: 100vh;
+  text-align: center;
+}
+
+.muted {
+  color: #8b929b;
+}
+
+.versions {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 16px;
+  margin: 16px auto 0;
+  text-align: left;
+  font-family: Consolas, 'SF Mono', monospace;
+  font-size: 13px;
+}
+
+.versions dt {
+  color: #8b929b;
+}
+
+.versions dd {
+  margin: 0;
+}

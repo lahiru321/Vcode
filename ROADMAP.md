@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P1 — Foundation
 
 **Next up:**
-1. `P1-03` Scaffold Electron + electron-vite + React
-2. `P1-04` Tailwind + shadcn/ui app shell
-3. `P1-05` Electron security baseline
+1. `P1-04` Tailwind + shadcn/ui app shell
+2. `P1-05` Electron security baseline
+3. `P1-06` Typed IPC
 
 ---
 
@@ -79,7 +79,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-02:* Node 24.15 (x64) · pnpm 9.15 · Git 2.54 · VS Build Tools 2022 + C++ · Windows SDK 10.0.26100 · Python 3.14 · long paths on · Claude Code 2.1. Not yet: Gemini/Codex CLIs (needed in P4), `gh auth login` (needed in P1-16).
 - [x] **P1-02** · Git repo at `D:\Vcode` + pnpm monorepo (`apps/desktop`, `packages/shared`, `packages/adapters`), base tsconfig, ESLint, Prettier; move the spec docs into `docs/` · `S`
   - *2026-10-02:* `apps/desktop` itself is created in P1-03. TypeScript pinned to `~6.0` because typescript-eslint doesn't support TS 7 yet.
-- [ ] **P1-03** · Scaffold Electron + electron-vite + React + TypeScript in `apps/desktop` · `M`
+- [x] **P1-03** · Scaffold Electron + electron-vite + React + TypeScript in `apps/desktop` · `M`
+  - *2026-10-02:* Electron 44.5 · electron-vite 5 · Vite 7 (electron-vite doesn't support Vite 8 yet) · React 19.3. Preload is sandboxed and fully bundled; workspace packages are bundled into main. Window opens via `pnpm dev`.
 - [ ] **P1-04** · Tailwind + shadcn/ui; app shell (sidebar + main area); dark theme · `M`
 - [ ] **P1-05** · Electron security baseline: `contextIsolation`, `sandbox`, no `nodeIntegration`, strict CSP, block navigation and new windows · `S`
 - [ ] **P1-06** · Typed IPC: zod contracts in `packages/shared`, preload exposes `window.agentHub`, main handler registry checks sender + validates payload · `M`

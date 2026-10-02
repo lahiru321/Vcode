@@ -4,9 +4,11 @@
   "description": "AI Agent Hub — desktop app for running multiple AI coding CLIs side by side",
   "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
+    "dev": "pnpm --filter @agent-hub/desktop dev",
+    "build": "pnpm --filter @agent-hub/desktop build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -17,6 +19,7 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
     "prettier": "^3.9.9",
     "typescript": "~6.0.3",
