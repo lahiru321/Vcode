@@ -1,6 +1,7 @@
 {
   "name": "@agent-hub/desktop",
   "version": "0.1.0",
+  "productName": "AI Agent Hub",
   "private": true,
   "description": "AI Agent Hub desktop app",
   "main": "./out/main/index.js",
@@ -8,12 +9,15 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json"
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@agent-hub/shared": "workspace:^",
+    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.3",
     "lucide-react": "^1.49.0",
     "radix-ui": "^1.6.7",
     "react": "^19.3.0",
@@ -24,10 +28,12 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "~24",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "drizzle-kit": "^0.31.11",
     "electron": "^44.5.1",
     "electron-vite": "^5.0.0",
     "tailwindcss": "^4.3.3",

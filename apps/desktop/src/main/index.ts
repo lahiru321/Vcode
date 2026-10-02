@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { APP_NAME } from '@agent-hub/shared';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
+import { closeDatabase, initDatabase } from './db';
 import { registerIpcHandlers } from './ipc';
 import { loadRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
@@ -45,8 +46,26 @@ function createMainWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
+  try {
+    initDatabase(app.getPath('userData'));
+  } catch (error) {
+    console.error('[db] failed to open the database:', error);
+    dialog.showErrorBox(
+      `${APP_NAME} can't start`,
+      `The local database could not be opened.
+
+${error instanceof Error ? error.message : String(error)}`,
+    );
+    app.exit(1);
+    return;
+  }
+
   registerIpcHandlers();
   createMainWindow();
+});
+
+app.on('will-quit', () => {
+  closeDatabase();
 });
 
 // Close-to-tray (P7-02) and macOS window conventions (M-02) replace this later.

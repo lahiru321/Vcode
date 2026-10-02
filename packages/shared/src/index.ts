@@ -4,4 +4,5 @@
 
 export const APP_NAME = 'AI Agent Hub';
 
+export * from './domain';
 export * from './ipc';

@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @agent-hub/desktop dev",
     "build": "pnpm --filter @agent-hub/desktop build",
+    "db:generate": "pnpm --filter @agent-hub/desktop db:generate",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

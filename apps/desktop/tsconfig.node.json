@@ -3,5 +3,11 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["electron.vite.config.ts", "build/**/*", "src/main/**/*", "src/preload/**/*"]
+  "include": [
+    "electron.vite.config.ts",
+    "drizzle.config.ts",
+    "build/**/*",
+    "src/main/**/*",
+    "src/preload/**/*"
+  ]
 }
