@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
+import { contentSecurityPolicy } from './build/csp';
 
 // Workspace packages ship TypeScript source, so main must bundle them instead of
 // leaving them as runtime require() calls.
@@ -25,6 +26,6 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src'),
       },
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), contentSecurityPolicy()],
   },
 });

@@ -1,6 +1,9 @@
 import { join } from 'node:path';
 import { APP_NAME } from '@agent-hub/shared';
 import { app, BrowserWindow } from 'electron';
+import { applySecurityBaseline } from './security';
+
+applySecurityBaseline();
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -18,10 +21,21 @@ function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      webSecurity: true,
+      devTools: !app.isPackaged,
     },
   });
 
   window.once('ready-to-show', () => window.show());
+
+  if (!app.isPackaged) {
+    // Surface renderer warnings and errors (e.g. CSP violations) in the dev terminal.
+    window.webContents.on('console-message', ({ level, message }) => {
+      if (level === 'warning' || level === 'error') {
+        console.log(`[renderer:${level}] ${message}`);
+      }
+    });
+  }
 
   // electron-vite sets ELECTRON_RENDERER_URL to the Vite dev server in development.
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];

@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P1 — Foundation
 
 **Next up:**
-1. `P1-05` Electron security baseline
-2. `P1-06` Typed IPC
-3. `P1-07` Platform layer
+1. `P1-06` Typed IPC
+2. `P1-07` Platform layer
+3. `P1-08` SQLite + Drizzle
 
 ---
 
@@ -83,7 +83,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-02:* Electron 44.5 · electron-vite 5 · Vite 7 (electron-vite doesn't support Vite 8 yet) · React 19.3. Preload is sandboxed and fully bundled; workspace packages are bundled into main. Window opens via `pnpm dev`.
 - [x] **P1-04** · Tailwind + shadcn/ui; app shell (sidebar + main area); dark theme · `M`
   - *2026-10-02:* Tailwind 4 + shadcn `new-york` (Radix, neutral, CSS variables) with extra `success` / `warning` tokens. Shell: sidebar (Projects / Agents / Workspaces), top bar, empty state, status bar. Buttons are placeholders until P1-12. Note: the shadcn CLI can't resolve the `@renderer` alias — after `shadcn add`, change `from "cn"` to `from '@renderer/lib/utils'` and remove the `cn` package if it was added.
-- [ ] **P1-05** · Electron security baseline: `contextIsolation`, `sandbox`, no `nodeIntegration`, strict CSP, block navigation and new windows · `S`
+- [x] **P1-05** · Electron security baseline: `contextIsolation`, `sandbox`, no `nodeIntegration`, strict CSP, block navigation and new windows · `S`
+  - *2026-10-02:* `src/main/security.ts`: global `app.enableSandbox()`, all navigation/redirects/new windows/webviews blocked, http(s) links open in the system browser after a confirm dialog, all browser permissions denied. CSP injected by `build/csp.ts` (strict in production; dev also allows inline scripts + HMR WebSocket). DevTools disabled when packaged; renderer warnings/errors print to the dev terminal.
 - [ ] **P1-06** · Typed IPC: zod contracts in `packages/shared`, preload exposes `window.agentHub`, main handler registry checks sender + validates payload · `M`
 - [ ] **P1-07** · Platform layer: interface + `win32.ts` + `darwin.ts` stub (`defaultShell`, `resolveExecutable`, `killProcessTree`, `loadUserEnvironment`, `revealInFileManager`); lint rule banning `process.platform` elsewhere · `M`
 - [ ] **P1-08** · SQLite + Drizzle: all V1 tables (V1 doc §8), migrations at startup, WAL + foreign keys on, DB file in `userData` · `M`
@@ -93,7 +94,7 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - [ ] **P1-12** · Projects UI: sidebar list, create / edit / delete, empty state · `M`
 - [ ] **P1-13** · App settings store (`app_settings`) + window size/position persistence · `S`
 - [ ] **P1-14** · Logging with pino → `userData/logs` · `S`
-- [ ] **P1-15** · Vitest + unit tests: platform layer, path validation, projects service · `M`
+- [ ] **P1-15** · Vitest + unit tests: platform layer, path validation, projects service, `isSafeExternalUrl` · `M`
 - [ ] **P1-16** · GitHub Actions on `windows-latest` + `macos-latest`: lint, typecheck, unit tests · `S`
 
 **Done when:**
@@ -176,7 +177,7 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - [ ] **P5-01** · dockview grid for terminal panels · `M`
 - [ ] **P5-02** · Add Terminal dialog: project → workspace → agent or plain shell · `M`
 - [ ] **P5-03** · Panel controls: close, maximize / restore, rename, rearrange, split · `M`
-- [ ] **P5-04** · Terminal toolbar: copy, paste, search, clear, stop, restart · `S`
+- [ ] **P5-04** · Terminal toolbar: copy, paste, search, clear, stop, restart (needs clipboard access: all browser permissions are denied since P1-05, so allow clipboard for the app only or route it through IPC) · `S`
 - [ ] **P5-05** · Save the layout per project (`projects.layout_json`) and restore it on launch · `M`
 - [ ] **P5-06** · Keyboard shortcuts (new terminal, close, maximize, next / previous panel) with `CommandOrControl` · `S`
 - [ ] **P5-07** · Status indicators on each panel and in the sidebar agent list · `S`
