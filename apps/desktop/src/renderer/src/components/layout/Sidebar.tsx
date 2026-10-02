@@ -1,12 +1,16 @@
 import type { ReactNode } from 'react';
 import { APP_NAME } from '@vcode/shared';
-import { Bot, FolderGit2, FolderPlus, Layers, Plus, Settings } from 'lucide-react';
+import { Bot, FolderPlus, Layers, Plus, Settings } from 'lucide-react';
 import { Button } from '@renderer/components/ui/button';
 import { ScrollArea } from '@renderer/components/ui/scroll-area';
 import { Separator } from '@renderer/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip';
+import { ProjectList } from '@renderer/features/projects/ProjectList';
+import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 
 export function Sidebar() {
+  const { startAdd, selected } = useProjects();
+
   return (
     <aside className="flex min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex h-12 items-center gap-2 px-4">
@@ -20,14 +24,16 @@ export function Sidebar() {
 
       <ScrollArea className="min-h-0 flex-1">
         <nav className="flex flex-col gap-5 p-3">
-          <SidebarSection title="Projects" actionLabel="Add project">
-            <EmptyHint icon={<FolderGit2 />}>No projects yet</EmptyHint>
+          <SidebarSection title="Projects" actionLabel="Add project" onAction={startAdd}>
+            <ProjectList />
           </SidebarSection>
           <SidebarSection title="Agents" actionLabel="Add agent">
             <EmptyHint icon={<Bot />}>No agents configured</EmptyHint>
           </SidebarSection>
           <SidebarSection title="Workspaces">
-            <EmptyHint icon={<FolderPlus />}>Select a project first</EmptyHint>
+            <EmptyHint icon={<FolderPlus />}>
+              {selected ? 'No workspaces yet' : 'Select a project first'}
+            </EmptyHint>
           </SidebarSection>
         </nav>
       </ScrollArea>
@@ -47,10 +53,11 @@ export function Sidebar() {
 interface SidebarSectionProps {
   title: string;
   actionLabel?: string;
+  onAction?: () => void;
   children: ReactNode;
 }
 
-function SidebarSection({ title, actionLabel, children }: SidebarSectionProps) {
+function SidebarSection({ title, actionLabel, onAction, children }: SidebarSectionProps) {
   return (
     <section className="flex flex-col gap-1">
       <div className="flex h-6 items-center justify-between pl-2">
@@ -65,6 +72,8 @@ function SidebarSection({ title, actionLabel, children }: SidebarSectionProps) {
                 size="icon"
                 className="size-6 text-muted-foreground"
                 aria-label={actionLabel}
+                disabled={!onAction}
+                onClick={onAction}
               >
                 <Plus className="size-3.5" />
               </Button>

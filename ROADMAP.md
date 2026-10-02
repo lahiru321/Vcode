@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P1 — Foundation
 
 **Next up:**
-1. `P1-12` Projects UI
-2. `P1-13` App settings + window state
-3. `P1-14` Logging
+1. `P1-13` App settings + window state
+2. `P1-14` Logging
+3. `P1-15` Vitest + unit tests
 
 ---
 
@@ -97,7 +97,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-02:* `src/main/projects/service.ts` + `ipc/projects.ts`; contracts `Project`, `CreateProjectRequest` (`rootPath`, optional `name` → defaults to the folder name), `UpdateProjectRequest` (`name` and/or `status`; folder and slug never change), `ProjectIdRequest`. Request schemas are `z.strictObject` (unknown keys rejected). Slug from the name, made unique with `-2`, `-3`, …. List is sorted by name, case-insensitive. Delete removes DB rows only (cascades), never files. Errors: `INVALID_REQUEST` (bad folder / input), `CONFLICT` (folder already a project), `NOT_FOUND`. Not yet: refusing delete while terminals run (P2-07).
 - [x] **P1-11** · Native folder picker; path validation (`realpath`, exists, is a folder); detect Git repo + default branch · `S`
   - *2026-10-02:* `dialog:pickFolder` (modal to the calling window; `{ path: null }` on cancel). `src/main/fs/folders.ts` `resolveExistingFolder`: absolute only, `realpath` (true casing + junctions resolved, so the same folder can't be added twice), must be a folder, not a drive root. `src/main/git/detect.ts` reads `.git` files directly (no `git` process, so nothing from the repo's config runs): default branch = `origin/HEAD` target, else the checked-out branch; handles linked worktrees (`.git` file + `commondir`). Only a repo **root** is detected, not a subfolder of a repo. Verified end-to-end through `window.vcode` in the built app, including restart persistence. The real native dialog still needs a manual click-through (P1-12).
-- [ ] **P1-12** · Projects UI: sidebar list, create / edit / delete, empty state · `M`
+- [x] **P1-12** · Projects UI: sidebar list, create / edit / delete, empty state · `M`
+  - *2026-10-02:* `src/renderer/src/features/projects/`: `ProjectsProvider` (list, selection, dialogs; plain React state, no query library), `ProjectList` (sidebar rows with a ⋯ menu: Rename / Archive·Restore / Remove; F2 renames and Delete removes the focused row; collapsible Archived group), `ProjectDialogs` (Add: folder picker → name pre-filled from the folder; Rename; Remove confirm that says files stay on disk). IPC errors are shown inline in dialogs, toasts (sonner) otherwise. Main area: project header (name, branch badge, path, Archived + Restore) or the first-project empty state. shadcn added: dialog, alert-dialog, input, label, dropdown-menu, sonner, badge (sonner pinned to dark; `next-themes` removed). Selection is not remembered across restarts yet (P1-13). Checked by driving the built app with real mouse/keyboard events and screenshots of every step.
 - [ ] **P1-13** · App settings store (`app_settings`) + window size/position persistence · `S`
 - [ ] **P1-14** · Logging with pino → `userData/logs` · `S`
 - [ ] **P1-15** · Vitest + unit tests: platform layer (port the P1-07 manual checks: PATHEXT resolution, cmd.exe argument round-trip, tree kill, registry env merge), path validation, projects service, DB (migrations, FK cascades — better-sqlite3 runs in plain Node), `isSafeExternalUrl`, IPC registry (sender check, request/response validation) · `M`
