@@ -1,6 +1,8 @@
 import { join } from 'node:path';
 import { APP_NAME } from '@agent-hub/shared';
 import { app, BrowserWindow } from 'electron';
+import { registerIpcHandlers } from './ipc';
+import { loadRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
 
 applySecurityBaseline();
@@ -37,18 +39,13 @@ function createMainWindow(): BrowserWindow {
     });
   }
 
-  // electron-vite sets ELECTRON_RENDERER_URL to the Vite dev server in development.
-  const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
-  if (!app.isPackaged && devServerUrl) {
-    void window.loadURL(devServerUrl);
-  } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'));
-  }
+  void loadRenderer(window);
 
   return window;
 }
 
 void app.whenReady().then(() => {
+  registerIpcHandlers();
   createMainWindow();
 });
 

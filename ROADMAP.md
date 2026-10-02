@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P1 — Foundation
 
 **Next up:**
-1. `P1-06` Typed IPC
-2. `P1-07` Platform layer
-3. `P1-08` SQLite + Drizzle
+1. `P1-07` Platform layer
+2. `P1-08` SQLite + Drizzle
+3. `P1-09` Native module rebuild
 
 ---
 
@@ -85,7 +85,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-02:* Tailwind 4 + shadcn `new-york` (Radix, neutral, CSS variables) with extra `success` / `warning` tokens. Shell: sidebar (Projects / Agents / Workspaces), top bar, empty state, status bar. Buttons are placeholders until P1-12. Note: the shadcn CLI can't resolve the `@renderer` alias — after `shadcn add`, change `from "cn"` to `from '@renderer/lib/utils'` and remove the `cn` package if it was added.
 - [x] **P1-05** · Electron security baseline: `contextIsolation`, `sandbox`, no `nodeIntegration`, strict CSP, block navigation and new windows · `S`
   - *2026-10-02:* `src/main/security.ts`: global `app.enableSandbox()`, all navigation/redirects/new windows/webviews blocked, http(s) links open in the system browser after a confirm dialog, all browser permissions denied. CSP injected by `build/csp.ts` (strict in production; dev also allows inline scripts + HMR WebSocket). DevTools disabled when packaged; renderer warnings/errors print to the dev terminal.
-- [ ] **P1-06** · Typed IPC: zod contracts in `packages/shared`, preload exposes `window.agentHub`, main handler registry checks sender + validates payload · `M`
+- [x] **P1-06** · Typed IPC: zod contracts in `packages/shared`, preload exposes `window.agentHub`, main handler registry checks sender + validates payload · `M`
+  - *2026-10-02:* zod 4. Channel names in `shared/src/ipc/channels.ts` (zod-free, so the preload bundle stays ~1 kB); schemas in `contracts.ts`. `window.agentHub` = `invoke(channel, payload?)` + `on(event, listener) → unsubscribe`, allowlisted. Main `handle()` (`src/main/ipc/registry.ts`) rejects senders that aren't the main frame of our window showing our UI, validates request **and** response (unknown response keys stripped), and returns a `{ ok, data | error: { code, message } }` envelope; renderer `invoke()` in `lib/ipc.ts` unwraps it and throws `IpcError`. Handlers throw `IpcError('NOT_FOUND', …)` for domain errors. Startup fails if a channel has no handler. First channel: `app:getInfo` (status bar); first event: `app:notice`. Adding a channel: name in `channels.ts` → schemas in `contracts.ts` → `handle()` in a `src/main/ipc/<module>.ts` registered from `ipc/index.ts`.
 - [ ] **P1-07** · Platform layer: interface + `win32.ts` + `darwin.ts` stub (`defaultShell`, `resolveExecutable`, `killProcessTree`, `loadUserEnvironment`, `revealInFileManager`); lint rule banning `process.platform` elsewhere · `M`
 - [ ] **P1-08** · SQLite + Drizzle: all V1 tables (V1 doc §8), migrations at startup, WAL + foreign keys on, DB file in `userData` · `M`
 - [ ] **P1-09** · Native module rebuild for Electron (better-sqlite3 now, node-pty in P2) · `S`
@@ -94,7 +95,7 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - [ ] **P1-12** · Projects UI: sidebar list, create / edit / delete, empty state · `M`
 - [ ] **P1-13** · App settings store (`app_settings`) + window size/position persistence · `S`
 - [ ] **P1-14** · Logging with pino → `userData/logs` · `S`
-- [ ] **P1-15** · Vitest + unit tests: platform layer, path validation, projects service, `isSafeExternalUrl` · `M`
+- [ ] **P1-15** · Vitest + unit tests: platform layer, path validation, projects service, `isSafeExternalUrl`, IPC registry (sender check, request/response validation) · `M`
 - [ ] **P1-16** · GitHub Actions on `windows-latest` + `macos-latest`: lint, typecheck, unit tests · `S`
 
 **Done when:**

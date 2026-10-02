@@ -1,7 +1,16 @@
+import type { AppInfo } from '@agent-hub/shared';
+import { invoke } from '@renderer/lib/ipc';
 import { cn } from '@renderer/lib/utils';
+import { useEffect, useState } from 'react';
 
 export function StatusBar({ className }: { className?: string }) {
-  const { versions } = window.agentHub;
+  const [info, setInfo] = useState<AppInfo | null>(null);
+
+  useEffect(() => {
+    invoke('app:getInfo').then(setInfo, (error: unknown) => {
+      console.error('Failed to load app info:', error);
+    });
+  }, []);
 
   return (
     <footer
@@ -14,9 +23,11 @@ export function StatusBar({ className }: { className?: string }) {
         <span className="size-1.5 rounded-full bg-success" />
         Ready · 0 agents running
       </span>
-      <span className="font-mono">
-        Electron {versions.electron} · Node {versions.node}
-      </span>
+      {info && (
+        <span className="font-mono">
+          v{info.version} · Electron {info.versions.electron} · Node {info.versions.node}
+        </span>
+      )}
     </footer>
   );
 }
