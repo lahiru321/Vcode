@@ -10,6 +10,7 @@
     "dev": "pnpm --filter @vcode/desktop dev",
     "build": "pnpm --filter @vcode/desktop build",
     "db:generate": "pnpm --filter @vcode/desktop db:generate",
+    "postinstall": "node scripts/fix-node-pty.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

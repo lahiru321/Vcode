@@ -105,7 +105,8 @@ describe('createTerminal', () => {
     const { db, deps, request } = setup();
     cleanupDb = db;
     deps.resolveShell = async () => ({
-      shell: 'C:\\x\\shell.cmd',
+      // OS-native path: the title comes from path.basename, which follows the OS.
+      shell: join('/x', 'shell.cmd'),
       command: {
         file: 'C:\\Windows\\System32\\cmd.exe',
         args: ['/d', '/s', '/c', '"x"'],
