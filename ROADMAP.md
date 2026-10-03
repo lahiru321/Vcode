@@ -31,12 +31,12 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P1 — Foundation
+**Current phase:** P2 — Terminal Engine
 
 **Next up:**
-1. `P1-16` CI on Windows + macOS
-2. `P2-01` PTY host utility process
-3. `P2-02` Spawn terminals with node-pty
+1. `P2-01` PTY host utility process
+2. `P2-02` Spawn terminals with node-pty
+3. `P2-03` MessagePort wiring renderer ⇄ PTY host
 
 ---
 
@@ -44,7 +44,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 | # | Phase | Goal | Size | Status |
 |---|---|---|---|---|
-| P1 | Foundation | App opens, projects persist, CI green on Windows + macOS | L | To do |
+| P1 | Foundation | App opens, projects persist, CI green on Windows + macOS | L | Done |
 | P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | To do |
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | To do |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | To do |
@@ -92,7 +92,7 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - [x] **P1-08** · SQLite + Drizzle: all V1 tables (V1 doc §8), migrations at startup, WAL + foreign keys on, DB file in `userData` · `M`
   - *2026-10-02:* better-sqlite3 13 + drizzle-orm 0.45 / drizzle-kit 0.31. Schema in `src/main/db/schema.ts`; enum values in `packages/shared/src/domain.ts` (for reuse in zod contracts). Additions beyond the ER diagram: `created_at` on repositories/workspaces, `updated_at` on agents/credentials, unique `projects.slug` / `projects.root_path` / `workspaces.path` / `credentials.name` / (project, workspace name), FK indexes. Deletes: a project cascades to repos, workspaces, its agents and sessions; audit logs keep the row with `project_id = null`; a deleted credential sets `agents.credential_id = null`. DB at `userData/vcode.db` = `%APPDATA%\Vcode\` (set `productName` so the folder name is stable). WAL, `synchronous=NORMAL`, `busy_timeout=5000`, FKs on. Migrations run with FKs off (SQLite ignores that pragma inside the migrator's transaction), then `foreign_key_check`, then FKs on. `build/copy-migrations.ts` copies migrations into `out/main/migrations`. If the DB can't open, the app shows an error dialog and exits. Schema change → `pnpm db:generate` → commit the SQL.
 - [x] **P1-09** · Native module rebuild for Electron (better-sqlite3 now, node-pty in P2) · `S`
-  - *2026-10-02:* Not needed for better-sqlite3: v13 ships prebuilt **Node-API** binaries (`prebuilds/win32-x64.node`, `darwin-arm64`, …) that load unchanged in Node 24 and Electron 44, so Vitest can use the same install. No `@electron/rebuild`. Check node-pty in P2-01 (if it isn't Node-API, add `@electron/rebuild` then). P8: native `.node` files must be `asarUnpack`ed.
+  - *2026-10-02:* Not needed for better-sqlite3: v13 ships prebuilt **Node-API** binaries (`prebuilds/win32-x64.node`, `darwin-arm64`, …) that load unchanged in Node 24 and Electron 44, so Vitest can use the same install. No `@electron/rebuild`. *2026-10-03 correction:* pnpm still compiled it from source on install (implicit `node-gyp rebuild` because of its `binding.gyp`) — wasted work that the library never loads (`lib/<platform>.js` always requires `prebuilds/<platform>.node`) and that broke `pnpm install` on the CI Windows runner; root `package.json` now has `pnpm.neverBuiltDependencies: ["better-sqlite3"]`. Check node-pty in P2-01 (if it isn't Node-API, add `@electron/rebuild` then). P8: native `.node` files must be `asarUnpack`ed.
 - [x] **P1-10** · Projects service + IPC: list / create / get / update / delete · `S`
   - *2026-10-02:* `src/main/projects/service.ts` + `ipc/projects.ts`; contracts `Project`, `CreateProjectRequest` (`rootPath`, optional `name` → defaults to the folder name), `UpdateProjectRequest` (`name` and/or `status`; folder and slug never change), `ProjectIdRequest`. Request schemas are `z.strictObject` (unknown keys rejected). Slug from the name, made unique with `-2`, `-3`, …. List is sorted by name, case-insensitive. Delete removes DB rows only (cascades), never files. Errors: `INVALID_REQUEST` (bad folder / input), `CONFLICT` (folder already a project), `NOT_FOUND`. Not yet: refusing delete while terminals run (P2-07).
 - [x] **P1-11** · Native folder picker; path validation (`realpath`, exists, is a folder); detect Git repo + default branch · `S`
@@ -105,7 +105,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-03:* pino 10, `src/main/logging/`. `createLogger('module')` gives a child logger; the root exists from the first import (no outputs until `initLogging()`), and the file doesn't import electron, so logging modules stay unit-testable. No pino transports (worker threads complicate bundling/packaging): a `multistream` with a **sync** file stream (the last lines before a crash aren't lost) plus, in dev, a readable one-line console stream in local time. Files: `app.getPath('logs')/main-YYYY-MM-DD.log` (= `userData/logs` on Windows, `~/Library/Logs/Vcode` on macOS), JSON lines with UTC ISO times; files older than 14 days are deleted at startup. Level: `info` packaged, `debug` in dev, `VCODE_LOG_LEVEL` overrides. Basic redaction of `apiKey` / `api_key` / `token` / `password` / `secret` / `authorization` keys (top level and one object down); pattern-based scrubbing is P4-06. Logged: startup (version, Electron, OS, log file), quit, uncaught exceptions (monitor only, Electron's default handling still runs), unhandled rejections, renderer + child process crashes, renderer console warnings/errors (now in packaged builds too), and everything that used `console.*` (IPC sender rejections and handler failures, DB open failure, settings fallbacks, window-state save errors). If the log folder can't be created the app still starts. Checked in the built app: old file pruned, other files kept, renderer error + settings warning in both the file and the dev terminal.
 - [x] **P1-15** · Vitest + unit tests: platform layer (port the P1-07 manual checks: PATHEXT resolution, cmd.exe argument round-trip, tree kill, registry env merge), path validation, projects service, DB (migrations, FK cascades — better-sqlite3 runs in plain Node), `isSafeExternalUrl`, IPC registry (sender check, request/response validation) · `M`
   - *2026-10-03:* Vitest 5 (runs on the existing Vite 7), one root `vitest.config.ts` for `apps/desktop/src/main/**/*.test.ts` + `packages/*/src/**/*.test.ts`, plain Node (`pnpm test`, `pnpm test:watch`). Tests sit next to the code; `src/main/testing.ts` gives temp folders and a freshly migrated temp DB per test. Modules that import `electron` are tested with `vi.mock('electron')`. **120 tests** (+4 macOS-only, skipped on Windows): DB (all V1 tables, WAL/FK/busy_timeout pragmas, reopen, corrupt file, every cascade / set-null rule, unique indexes), projects service (slugify, default name, Git branch, unique slugs, duplicate folder also through a junction, sort order, rename/archive/delete, NOT_FOUND), folder validation, Git detection (origin/HEAD, detached, worktree `commondir`, relative `gitdir`), settings store, logging (file, levels, early child loggers, redaction, error stacks, pruning), `isSafeExternalUrl`, IPC registry (sender checks, request validation, response stripping, error mapping, missing handlers, event validation), shared contracts, platform layer (PATH/PATHEXT order and filtering, `.ps1` only by path, current folder never searched, app execution alias, **30 tricky arguments** round-tripped through an npm-style `.cmd` shim, `.cmd` path with spaces and `&`, tree kill of parent + grandchild, registry env). `mergeEnvironment` was pulled out of `win32.loadUserEnvironment` so its rules are tested directly. When `vi.resetModules()` reloads a module, take `IpcError` from the reloaded `@vcode/shared` too, or `instanceof` fails. The macOS tests first run in CI (P1-16).
-- [ ] **P1-16** · GitHub Actions on `windows-latest` + `macos-latest`: lint, typecheck, unit tests · `S`
+- [x] **P1-16** · GitHub Actions on `windows-latest` + `macos-latest`: lint, typecheck, unit tests · `S`
+  - *2026-10-03:* `.github/workflows/ci.yml`: push to `main`, pull requests and manual runs; matrix `windows-latest` + `macos-latest` (`fail-fast: false`), Node 24, pnpm from `packageManager`, pnpm store cached; steps: `pnpm install --frozen-lockfile` → `format:check` → `lint` → `typecheck` → `test`. `ELECTRON_SKIP_BINARY_DOWNLOAD=1` (tests don't need Electron). Older runs of the same ref are cancelled. ~1 min per OS. First green run: [37122680987](https://github.com/lahiru321/Vcode/actions/runs/37122680987); the macOS-only platform tests passed there on their first run. Fixed on the way: `pnpm install` failed on the Windows runner because pnpm ran an implicit `node-gyp rebuild` for better-sqlite3 (it has a `binding.gyp` and no install script) — now `pnpm.neverBuiltDependencies: ["better-sqlite3"]`, see P1-09. Known warning: `pnpm/action-setup@v4` targets the deprecated Node 20 Actions runtime (GitHub runs it on Node 24 for now); bump when a newer major is out. `gh` isn't logged in yet; the repo is public, so run results can be read without it.
 
 **Done when:**
 - `pnpm dev` opens the app window.
@@ -290,7 +291,7 @@ From the Vibe Coding Plan (§20 roadmap):
 |---|---|---|
 | Final app name | P8-02 | Decided 2026-10-02: **Vcode** |
 | Code-signing certificate (Authenticode; Apple Developer ID later) | P8-03 | Open |
-| GitHub repo location + public / private | P1-16 | Open |
+| GitHub repo location + public / private | P1-16 | Decided 2026-10-03: **github.com/lahiru321/Vcode**, public |
 | License | P8 | Open |
 
 ---
@@ -327,3 +328,4 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-02** — Roadmap created from spec v1.1 (Desktop Edition).
 - **2026-10-02** — Specs moved to `docs/`. TypeScript pinned to 6.0.x until typescript-eslint supports TS 7 (revisit later).
 - **2026-10-02** — App renamed **AI Agent Hub → Vcode** (product name, window title, `%APPDATA%\Vcode\vcode.db`, `@vcode/*` packages, `window.vcode` bridge). The spec documents keep their original names. GitHub: https://github.com/lahiru321/Vcode
+- **2026-10-03** — **P1 Foundation done** (P1-13 … P1-16). All three Done-when checks pass: the app window opens, projects persist across restarts, CI is green on Windows and macOS. P1-09 note corrected (better-sqlite3 build scripts are now skipped).
