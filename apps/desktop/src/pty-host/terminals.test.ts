@@ -179,7 +179,8 @@ describe('TerminalManager (real node-pty)', () => {
       threw = true;
     }
     if (!threw) {
-      await vi.waitFor(() => expect(exits[0]?.exitCode).not.toBe(0), { timeout: 10_000 });
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 10_000 });
+      expect(exits[0]!.exitCode).not.toBe(0);
     }
     expect(manager.size).toBe(0);
   });
