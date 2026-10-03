@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P2 — Terminal Engine
 
 **Next up:**
-1. `P2-02` Spawn terminals with node-pty
-2. `P2-03` MessagePort wiring renderer ⇄ PTY host
-3. `P2-04` xterm.js terminal component
+1. `P2-03` MessagePort wiring renderer ⇄ PTY host
+2. `P2-04` xterm.js terminal component
+3. `P2-05` Output batching + back-pressure
 
 ---
 
@@ -122,13 +122,15 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 
 - [x] **P2-01** · PTY host as an Electron `utilityProcess`; main starts it and restarts it if it dies · `M`
   - *2026-10-03:* Entry `src/pty-host/index.ts`, built as a second main input → `out/main/pty-host.js`, forked with `utilityProcess.fork` (`serviceName` "Vcode PTY Host" — shows as the process **name** in `app.getAppMetrics()`; `stdio: 'pipe'`, each stdout/stderr line logged). Protocol in `src/pty-host/protocol.ts`: main → host `request {id, method, params}` / `shutdown`; host → main `ready {pid}`, `response {id, ok, result | error}`, `log {level, msg, data}` (host records go to the main log file). Main validates every host message with zod (a plain `z.union` — zod 4's `discriminatedUnion` refuses two variants with the same `kind`). First method: `ping`; P2-02 adds spawn / write / resize / kill. `src/main/pty-host/supervisor.ts` (`PtyHostSupervisor`, Electron only via an injected `fork`, so it's unit-tested with a fake process + fake timers): states idle → starting → ready → restarting / stopping → stopped / failed; ready timeout 10 s (then killed and counted as a crash); restart delays 250 ms, 1 s, 2 s, 5 s…; **5 crashes within 60 s → `failed`**, no more restarts, and an `app:notice` error toast ("Terminals are unavailable…"); pending requests are rejected when the host exits; `exit` event carries `{ code, expected }` for P2-08. Quit: `before-quit` waits for `ptyHost.stop()` (sends `shutdown`, kills after 3 s). Renderer: new `AppNotices` shows `app:notice` events as toasts (nothing listened before). node-pty 1.1.0 added now (see P1-09). Checked in the built app: host running, killed from outside → restarted with a new PID, crash loop → gives up + toast, normal quit → host logs "shutting down", exits 0, app closes in ~1.5 s. 24 new unit tests (supervisor + host entry).
-- [ ] **P2-02** · Spawn terminals with node-pty using `platform.defaultShell()`; record `terminal_sessions` rows · `M`
+- [x] **P2-02** · Spawn terminals with node-pty using `platform.defaultShell()`; record `terminal_sessions` rows · `M`
+  - *2026-10-03:* IPC `terminals:create { projectId, workspaceId?, cols, rows, title? }` and `terminals:list { projectId }` (no UI until P2-04). `src/main/terminals/service.ts`: project must exist and not be archived (`CONFLICT`); without `workspaceId` the project's `main` workspace is used (created on first use — the minimal part of P3-04); its folder is checked with `resolveExistingFolder` before anything starts; shell = `platform.defaultShell()` + `shellArgs()` via `buildCommand` (pre-quoted Windows command lines are passed to node-pty as one string). Row inserted as `starting` → `running` with the PID once the host has spawned it; spawn failure → `failed` and `INTERNAL` with the host's message, host not running → `UNAVAILABLE` (new IPC error code; `PtyHostError` now has a `reason`). Exits: `exited` + exit code; exits during host shutdown → `stopped`. Environment (`terminals/environment.ts`): the user's registry environment, read once at startup and cached (falls back to the app's own), minus `ELECTRON_*`, plus `TERM_PROGRAM=Vcode`, `TERM_PROGRAM_VERSION`, `COLORTERM=truecolor`. Host (`src/pty-host/terminals.ts`, `TerminalManager`): node-pty sessions keyed by session id, methods `spawn` / `write` / `resize` / `kill` / `output` / `list`, an `exit` message per ended process, the last 256 kB of output kept per terminal (until P2-03/P2-06), and shutdown closes every terminal (2 s grace) before exiting. Found while checking in the built app: a shell **outlives a crashed host** — main now kills the process tree of every session the host leaves behind. Checked in the built app: PowerShell started in the project folder as a child of the host, list, size validation, shell killed → `exited`, host killed → `failed` and its shell gone, new terminal after the host restart, quit → `stopped` and no shell left. Tests: manager with a fake pty and with **real node-pty** (PowerShell / `sh`: input → output, env var, `exit 3`), service with a real DB and fake host, environment. Tests may now branch on `process.platform` (lint rule relaxed for `*.test.ts`).
 - [ ] **P2-03** · MessagePort wiring renderer ⇄ PTY host: output, input, resize · `M`
 - [ ] **P2-04** · xterm.js terminal component + fit / search / web-links / WebGL add-ons · `M`
 - [ ] **P2-05** · Output batching (~16 ms) + back-pressure so a noisy process can't freeze the UI · `S`
 - [ ] **P2-06** · `@xterm/headless` mirror + serialize add-on; `terminals:attach` replays the screen after a reload · `M`
 - [ ] **P2-07** · Stop / restart / close; stop calls `platform.killProcessTree()` · `M`
-- [ ] **P2-08** · PTY host crash recovery: affected sessions marked `FAILED` · `S`
+- [x] **P2-08** · PTY host crash recovery: affected sessions marked `FAILED` · `S`
+  - *2026-10-03:* Done with P2-02: on an unexpected host exit, every session started by this run that hasn't ended is marked `failed` and its process tree is killed (shells outlive the host otherwise); the host restarts (P2-01) and new terminals work. Rows left `running` by an earlier crashed run are left for P2-09. The terminal panel showing the failure comes with P2-04.
 - [ ] **P2-09** · Orphan cleanup on launch: check stored PIDs (PID + process name + start time) and kill leftovers · `M`
 - [ ] **P2-10** · Terminal safety: confirm before opening links; block OSC 52 clipboard writes · `S`
 - [ ] **P2-11** · Integration test: spawn shell, echo text, kill the process tree · `M`
@@ -150,6 +152,7 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - [ ] **P3-02** · `ClaudeAdapter`: find the executable (`.exe` / `.cmd` shim via `resolveExecutable`), validate with `--version`, build the command · `M`
 - [ ] **P3-03** · Agents service + IPC (minimal create / list) · `S`
 - [ ] **P3-04** · Default `main` workspace created with each project; agents launch there · `S`
+  - *2026-10-03:* The `main` workspace (kind `main`, path = project root, name `main`) is already created on first use by P2-02 (`ensureMainWorkspace`, `src/main/workspaces/service.ts`). Left for P3-04: agents launching there.
 - [ ] **P3-05** · `agent_sessions` lifecycle + status (`CREATED → STARTING → READY → … → STOPPED / FAILED`) · `M`
 - [ ] **P3-06** · Best-effort `READY` / `WORKING` / `WAITING` detection (output idle timeout, terminal bell) · `M`
 - [ ] **P3-07** · "Start Claude Code" button per project + status badge · `S`

@@ -54,14 +54,36 @@ interface Pending {
   timer: NodeJS.Timeout;
 }
 
+export interface TerminalExit {
+  sessionId: string;
+  exitCode: number;
+  signal: number | null;
+}
+
 interface SupervisorEvents {
   ready: [pid: number];
   exit: [exit: HostExit];
   failed: [];
+  /** A terminal's process ended. */
+  terminalExit: [exit: TerminalExit];
 }
+
+/**
+ * - `unavailable`: the host isn't running, or stopped before answering.
+ * - `timeout`: no answer in time.
+ * - `failed`: the host answered with an error (e.g. the process couldn't be started).
+ */
+export type PtyHostErrorReason = 'unavailable' | 'timeout' | 'failed';
 
 export class PtyHostError extends Error {
   override readonly name = 'PtyHostError';
+
+  constructor(
+    readonly reason: PtyHostErrorReason,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 export class PtyHostSupervisor extends EventEmitter<SupervisorEvents> {
@@ -122,14 +144,16 @@ export class PtyHostSupervisor extends EventEmitter<SupervisorEvents> {
     const host = this.host;
     if (!host || this.currentState !== 'ready') {
       return Promise.reject(
-        new PtyHostError(`The terminal host is not running (${this.currentState}).`),
+        new PtyHostError('unavailable', `The terminal host is not running (${this.currentState}).`),
       );
     }
     const id = this.nextRequestId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new PtyHostError(`The terminal host did not answer "${method}" in time.`));
+        reject(
+          new PtyHostError('timeout', `The terminal host did not answer "${method}" in time.`),
+        );
       }, timeoutMs);
       this.pending.set(id, { resolve: resolve as (result: unknown) => void, reject, timer });
       host.postMessage({ kind: 'request', id, method, params });
@@ -224,10 +248,17 @@ export class PtyHostSupervisor extends EventEmitter<SupervisorEvents> {
         if (message.ok) {
           pending.resolve(message.result);
         } else {
-          pending.reject(new PtyHostError(message.error.message));
+          pending.reject(new PtyHostError('failed', message.error.message));
         }
         break;
       }
+      case 'exit':
+        this.emit('terminalExit', {
+          sessionId: message.sessionId,
+          exitCode: message.exitCode,
+          signal: message.signal,
+        });
+        break;
       case 'log':
         this.log[message.level](message.data ?? {}, message.msg);
         break;
@@ -243,7 +274,7 @@ export class PtyHostSupervisor extends EventEmitter<SupervisorEvents> {
     this.hostPid = undefined;
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new PtyHostError('The terminal host stopped.'));
+      pending.reject(new PtyHostError('unavailable', 'The terminal host stopped.'));
       this.pending.delete(id);
     }
 

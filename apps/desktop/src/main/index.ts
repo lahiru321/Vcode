@@ -8,6 +8,7 @@ import { closeLogging, createLogger, initLogging, levelFromEnv } from './logging
 import { ptyHost } from './pty-host';
 import { loadRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
+import { trackTerminalSessions } from './terminals';
 import { loadWindowState, trackWindowState } from './window-state';
 
 const log = createLogger('app');
@@ -119,6 +120,7 @@ function startPtyHost(): void {
       message: `Terminals are unavailable: the terminal host keeps crashing. Restart ${APP_NAME} to try again.`,
     }),
   );
+  trackTerminalSessions();
   ptyHost.start();
 }
 

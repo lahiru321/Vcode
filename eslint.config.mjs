@@ -20,8 +20,9 @@ export default tseslint.config(
     },
   },
   {
-    // All OS differences go through apps/desktop/src/main/platform (V1 doc §6).
-    ignores: ['apps/desktop/src/main/platform/**'],
+    // All OS differences go through apps/desktop/src/main/platform (V1 doc §6). Tests may
+    // branch on the OS to pick per-OS fixtures.
+    ignores: ['apps/desktop/src/main/platform/**', '**/*.test.ts'],
     rules: {
       'no-restricted-properties': [
         'error',

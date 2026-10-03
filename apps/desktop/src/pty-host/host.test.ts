@@ -63,10 +63,23 @@ describe('PTY host entry', () => {
     });
   });
 
-  it('exits cleanly on shutdown', () => {
+  it('exits cleanly on shutdown', async () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     port.emit('message', { data: { kind: 'shutdown' } });
-    expect(port.sent.at(-1)).toEqual({ kind: 'log', level: 'info', msg: 'shutting down' });
-    expect(exit).toHaveBeenCalledWith(0);
+    expect(port.sent.at(-1)).toEqual({
+      kind: 'log',
+      level: 'info',
+      msg: 'shutting down',
+      data: { terminals: 0 },
+    });
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
+  });
+
+  it('reports an unknown terminal as an error', async () => {
+    port.request(9, 'write', { sessionId: 'nope', data: 'x' });
+    expect(await port.response(9)).toMatchObject({
+      ok: false,
+      error: { message: 'No running terminal nope' },
+    });
   });
 });

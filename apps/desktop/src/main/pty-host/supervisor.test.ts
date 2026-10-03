@@ -149,7 +149,8 @@ describe('request', () => {
       ok: false,
       error: { message: 'nope' },
     });
-    await expect(result).rejects.toEqual(new PtyHostError('nope'));
+    await expect(result).rejects.toEqual(new PtyHostError('failed', 'nope'));
+    await expect(result).rejects.toMatchObject({ reason: 'failed' });
   });
 
   it('times out, and ignores a late answer', async () => {

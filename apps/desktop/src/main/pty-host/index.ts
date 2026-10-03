@@ -4,7 +4,7 @@ import { utilityProcess } from 'electron';
 import { createLogger } from '../logging';
 import { PtyHostSupervisor, type HostProcess } from './supervisor';
 
-export { PtyHostError, type HostExit, type HostState } from './supervisor';
+export { PtyHostError, type HostExit, type HostState, type TerminalExit } from './supervisor';
 
 const log = createLogger('pty-host');
 

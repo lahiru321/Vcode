@@ -3,6 +3,7 @@ import { registerDialogHandlers } from './dialog';
 import { registerProjectHandlers } from './projects';
 import { assertAllChannelsHandled } from './registry';
 import { registerSettingsHandlers } from './settings';
+import { registerTerminalHandlers } from './terminals';
 
 export { broadcastEvent, sendEvent } from './registry';
 
@@ -12,5 +13,6 @@ export function registerIpcHandlers(): void {
   registerDialogHandlers();
   registerProjectHandlers();
   registerSettingsHandlers();
+  registerTerminalHandlers();
   assertAllChannelsHandled();
 }

@@ -7,6 +7,8 @@ export const IPC_ERROR_CODES = [
   'INVALID_REQUEST',
   'NOT_FOUND',
   'CONFLICT',
+  /** A required part of the app isn't running (e.g. the terminal host). */
+  'UNAVAILABLE',
   'INTERNAL',
 ] as const;
 

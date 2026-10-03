@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PROJECT_STATUSES } from '../domain';
+import { PROJECT_STATUSES, SESSION_STATUSES } from '../domain';
 import type { EventChannel, InvokeChannel } from './channels';
 
 // One contract per channel. Main validates every request and response against these, and
@@ -66,6 +66,41 @@ export const UpdateProjectRequest = z
   });
 export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequest>;
 
+// Terminals (V1 doc §11, §20). A terminal runs in a workspace; without `workspaceId` the
+// project's `main` workspace (its root folder) is used. Terminal data does not go through
+// these channels: each terminal gets its own MessagePort (P2-03).
+
+export const TerminalSession = z.object({
+  id: Id,
+  workspaceId: Id,
+  title: z.string(),
+  shell: z.string(),
+  cwd: z.string(),
+  pid: z.number().int().nullable(),
+  cols: z.number().int(),
+  rows: z.number().int(),
+  status: z.enum(SESSION_STATUSES),
+  exitCode: z.number().int().nullable(),
+  startedAt: Timestamp,
+  endedAt: Timestamp.nullable(),
+});
+export type TerminalSession = z.infer<typeof TerminalSession>;
+
+/** Terminal size in character cells. */
+export const TerminalCols = z.number().int().min(2).max(1000);
+export const TerminalRows = z.number().int().min(1).max(500);
+
+export const CreateTerminalRequest = z.strictObject({
+  projectId: Id,
+  workspaceId: Id.optional(),
+  cols: TerminalCols,
+  rows: TerminalRows,
+  title: z.string().trim().min(1).max(100).optional(),
+});
+export type CreateTerminalRequest = z.infer<typeof CreateTerminalRequest>;
+
+export const ListTerminalsRequest = z.strictObject({ projectId: Id });
+
 // Settings the renderer may read and change (V1 doc §20). Each key is one `app_settings` row;
 // main falls back to the default when a row is missing or no longer matches its schema.
 // Main-only state (e.g. window bounds) lives in the same table but is never exposed here.
@@ -97,6 +132,8 @@ export const invokeContracts = {
   'projects:create': { request: CreateProjectRequest, response: Project },
   'projects:update': { request: UpdateProjectRequest, response: Project },
   'projects:delete': { request: ProjectIdRequest, response: z.object({ id: Id }) },
+  'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
+  'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
   'settings:get': { request: NoPayload, response: Settings },
   'settings:set': { request: SetSettingsRequest, response: Settings },
   'dialog:pickFolder': { request: NoPayload, response: PickFolderResponse },

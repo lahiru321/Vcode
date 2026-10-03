@@ -1,4 +1,6 @@
+import { spawn } from 'node-pty';
 import type { HostLogLevel, HostMethod, HostMethods, HostToMain, MainToHost } from './protocol';
+import { TerminalManager } from './terminals';
 
 // PTY host entry: an Electron utility process that will own every pseudo-terminal (V1 doc §11),
 // so a busy or crashing terminal can't freeze the UI or main. Main starts it, restarts it if it
@@ -22,8 +24,25 @@ type Handlers = {
   ) => HostMethods[M]['result'] | Promise<HostMethods[M]['result']>;
 };
 
+const terminals = new TerminalManager(spawn, (exit) => send({ kind: 'exit', ...exit }));
+
 const handlers: Handlers = {
   ping: () => ({ pid: process.pid, uptimeMs: Date.now() - startedAt }),
+  spawn: (params) => terminals.spawn(params),
+  write: ({ sessionId, data }) => {
+    terminals.write(sessionId, data);
+    return null;
+  },
+  resize: ({ sessionId, cols, rows }) => {
+    terminals.resize(sessionId, cols, rows);
+    return null;
+  },
+  kill: ({ sessionId }) => {
+    terminals.kill(sessionId);
+    return null;
+  },
+  output: ({ sessionId }) => ({ data: terminals.output(sessionId) }),
+  list: () => ({ sessions: terminals.list() }),
 };
 
 async function handleRequest(id: number, method: HostMethod, params: unknown): Promise<void> {
@@ -40,10 +59,21 @@ async function handleRequest(id: number, method: HostMethod, params: unknown): P
   }
 }
 
+/** How long shutdown waits for terminals to report their exit. */
+const SHUTDOWN_GRACE_MS = 2_000;
+
 function shutdown(): void {
-  // P2-07: stop every terminal's process tree before exiting.
-  log('info', 'shutting down');
-  process.exit(0);
+  log('info', 'shutting down', { terminals: terminals.size });
+  // Closing a pseudo-terminal ends the processes attached to its console. Processes that
+  // detached from it are handled by tree kill (P2-07) and orphan cleanup (P2-09).
+  terminals.killAll();
+  const deadline = Date.now() + SHUTDOWN_GRACE_MS;
+  const timer = setInterval(() => {
+    if (terminals.size === 0 || Date.now() > deadline) {
+      clearInterval(timer);
+      process.exit(0);
+    }
+  }, 25);
 }
 
 port.on('message', ({ data }: { data: MainToHost }) => {
