@@ -2,6 +2,8 @@ import type { EventPayload, InvokeArgs, InvokeResponse, IpcResult } from '@vcode
 import {
   EVENT_CHANNELS,
   INVOKE_CHANNELS,
+  TERMINAL_PORT_CHANNEL,
+  TERMINAL_PORT_MESSAGE,
   type EventChannel,
   type InvokeChannel,
 } from '@vcode/shared/ipc/channels';
@@ -45,3 +47,13 @@ const api = {
 export type VcodeApi = typeof api;
 
 contextBridge.exposeInMainWorld('vcode', api);
+
+// Terminal MessagePorts (`terminals:attach`) can't cross the context bridge, so they are handed
+// to the page with window.postMessage — this window only, which the page checks.
+ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, payload: { terminalId: string }) => {
+  window.postMessage(
+    { source: TERMINAL_PORT_MESSAGE, terminalId: payload.terminalId },
+    '*',
+    event.ports,
+  );
+});

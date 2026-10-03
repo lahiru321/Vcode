@@ -7,6 +7,7 @@ import { createProject, updateProject } from '../projects/service';
 import { PtyHostError } from '../pty-host/supervisor';
 import { tempDir, testDatabase } from '../testing';
 import {
+  attachTerminal,
   createTerminal,
   endActiveSessions,
   getTerminal,
@@ -247,6 +248,46 @@ describe('session lifecycle', () => {
     recordTerminalExit(db, { sessionId: t.id, exitCode: 0, signal: null }, 'stopped');
     expect(getTerminal(db, t.id)).toMatchObject({ status: 'stopped', exitCode: 0 });
     expect(endActiveSessions(db, 'stopped')).toEqual([]); // nothing left to kill
+  });
+});
+
+describe('attachTerminal', () => {
+  it('hands the port to the host with an attach request', async () => {
+    const { db, deps, request } = setup();
+    cleanupDb = db;
+    const p = await project(db);
+    const t = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
+    const port = { fake: 'port' };
+    await attachTerminal(deps, t.id, port);
+    expect(request).toHaveBeenLastCalledWith('attach', { sessionId: t.id }, { transfer: [port] });
+  });
+
+  it('refuses a terminal that has ended or does not exist', async () => {
+    const { db, deps, request } = setup();
+    cleanupDb = db;
+    const p = await project(db);
+    const t = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
+    recordTerminalExit(db, { sessionId: t.id, exitCode: 0, signal: null });
+    request.mockClear();
+    await expect(attachTerminal(deps, t.id, {})).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(attachTerminal(deps, MISSING_ID, {})).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('maps host failures to IPC errors', async () => {
+    const { db, deps, request } = setup();
+    cleanupDb = db;
+    const p = await project(db);
+    const t = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
+    request.mockRejectedValueOnce(new PtyHostError('unavailable', 'not running'));
+    await expect(attachTerminal(deps, t.id, {})).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    request.mockRejectedValueOnce(new PtyHostError('failed', 'No running terminal x'));
+    await expect(attachTerminal(deps, t.id, {})).rejects.toMatchObject({
+      code: 'INTERNAL',
+      message: 'Could not connect to the terminal: No running terminal x',
+    });
   });
 });
 

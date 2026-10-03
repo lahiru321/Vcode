@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PROJECT_STATUSES, SESSION_STATUSES } from '../domain';
+import { TERMINAL_COLS, TERMINAL_ROWS } from '../terminal-port';
 import type { EventChannel, InvokeChannel } from './channels';
 
 // One contract per channel. Main validates every request and response against these, and
@@ -87,8 +88,8 @@ export const TerminalSession = z.object({
 export type TerminalSession = z.infer<typeof TerminalSession>;
 
 /** Terminal size in character cells. */
-export const TerminalCols = z.number().int().min(2).max(1000);
-export const TerminalRows = z.number().int().min(1).max(500);
+export const TerminalCols = z.number().int().min(TERMINAL_COLS.min).max(TERMINAL_COLS.max);
+export const TerminalRows = z.number().int().min(TERMINAL_ROWS.min).max(TERMINAL_ROWS.max);
 
 export const CreateTerminalRequest = z.strictObject({
   projectId: Id,
@@ -100,6 +101,9 @@ export const CreateTerminalRequest = z.strictObject({
 export type CreateTerminalRequest = z.infer<typeof CreateTerminalRequest>;
 
 export const ListTerminalsRequest = z.strictObject({ projectId: Id });
+
+/** Sends the terminal's MessagePort to the calling window on TERMINAL_PORT_CHANNEL. */
+export const AttachTerminalRequest = z.strictObject({ terminalId: Id });
 
 // Settings the renderer may read and change (V1 doc §20). Each key is one `app_settings` row;
 // main falls back to the default when a row is missing or no longer matches its schema.
@@ -134,6 +138,10 @@ export const invokeContracts = {
   'projects:delete': { request: ProjectIdRequest, response: z.object({ id: Id }) },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
+  'terminals:attach': {
+    request: AttachTerminalRequest,
+    response: z.object({ terminalId: Id }),
+  },
   'settings:get': { request: NoPayload, response: Settings },
   'settings:set': { request: SetSettingsRequest, response: Settings },
   'dialog:pickFolder': { request: NoPayload, response: PickFolderResponse },

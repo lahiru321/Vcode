@@ -1,7 +1,8 @@
+import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import { spawn as spawnPty, type IPty } from 'node-pty';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TerminalManager, type SpawnPty, type TerminalExit } from './terminals';
+import { TerminalManager, type SpawnPty, type TerminalExit, type TerminalPort } from './terminals';
 
 const isWindows = process.platform === 'win32';
 
@@ -113,6 +114,108 @@ describe('TerminalManager (fake pty)', () => {
     manager.spawn({ ...PARAMS, sessionId: 'b' });
     expect(() => manager.killAll()).not.toThrow();
     expect(a.calls.kill).toHaveBeenCalled();
+  });
+});
+
+/** A MessagePortMain stand-in: records what the host posts; the test plays the renderer. */
+class FakePort extends EventEmitter {
+  readonly posted: unknown[] = [];
+  started = false;
+  closed = false;
+  postMessage(message: unknown): void {
+    this.posted.push(message);
+  }
+  start(): void {
+    this.started = true;
+  }
+  close(): void {
+    this.closed = true;
+    this.emit('close');
+  }
+  fromRenderer(data: unknown): void {
+    this.emit('message', { data });
+  }
+}
+
+describe('TerminalManager.attach', () => {
+  function attached() {
+    const fake = fakePty();
+    const manager = new TerminalManager(() => fake.pty, vi.fn());
+    manager.spawn(PARAMS);
+    return { fake, manager };
+  }
+
+  it('replays recent output, then forwards new output', () => {
+    const { fake, manager } = attached();
+    fake.data('before ');
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    expect(port.started).toBe(true);
+    fake.data('after');
+    expect(port.posted).toEqual([
+      { type: 'data', data: 'before ' },
+      { type: 'data', data: 'after' },
+    ]);
+  });
+
+  it('sends nothing on attach when there is no output yet', () => {
+    const { manager } = attached();
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    expect(port.posted).toEqual([]);
+  });
+
+  it('passes valid input and resize to the pty and drops everything else', () => {
+    const { fake, manager } = attached();
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    port.fromRenderer({ type: 'input', data: 'dir\r' });
+    port.fromRenderer({ type: 'resize', cols: 120, rows: 40 });
+    port.fromRenderer({ type: 'resize', cols: 0, rows: 40 });
+    port.fromRenderer({ type: 'input', data: 42 });
+    port.fromRenderer('garbage');
+    expect(fake.calls.write).toHaveBeenCalledExactlyOnceWith('dir\r');
+    expect(fake.calls.resize).toHaveBeenCalledExactlyOnceWith(120, 40);
+  });
+
+  it('replaces an earlier connection', () => {
+    const { fake, manager } = attached();
+    const first = new FakePort();
+    const second = new FakePort();
+    manager.attach('s1', first as unknown as TerminalPort);
+    manager.attach('s1', second as unknown as TerminalPort);
+    expect(first.closed).toBe(true);
+    first.fromRenderer({ type: 'input', data: 'stale' });
+    fake.data('x');
+    expect(fake.calls.write).not.toHaveBeenCalled();
+    expect(second.posted).toEqual([{ type: 'data', data: 'x' }]);
+    expect(manager.isAttached('s1')).toBe(true);
+  });
+
+  it('forgets a connection the renderer closed, and keeps buffering', () => {
+    const { fake, manager } = attached();
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    port.close();
+    expect(manager.isAttached('s1')).toBe(false);
+    fake.data('later');
+    expect(manager.output('s1')).toBe('later');
+  });
+
+  it('tells the renderer when the process exits, then closes the port', () => {
+    const { fake, manager } = attached();
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    fake.exit(2);
+    expect(port.posted.at(-1)).toEqual({ type: 'exit', exitCode: 2, signal: null });
+    expect(port.closed).toBe(true);
+  });
+
+  it('refuses an unknown terminal', () => {
+    const manager = new TerminalManager(() => fakePty().pty, vi.fn());
+    expect(() => manager.attach('nope', new FakePort() as unknown as TerminalPort)).toThrow(
+      /No running terminal/,
+    );
   });
 });
 

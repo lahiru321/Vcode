@@ -6,3 +6,4 @@ export const APP_NAME = 'Vcode';
 
 export * from './domain';
 export * from './ipc';
+export * from './terminal-port';

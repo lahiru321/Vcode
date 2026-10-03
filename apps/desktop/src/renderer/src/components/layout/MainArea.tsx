@@ -9,8 +9,13 @@ import {
 } from 'lucide-react';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
+import { TerminalTabs } from '@renderer/features/terminals/TerminalTabs';
+import { TerminalView } from '@renderer/features/terminals/TerminalView';
+import {
+  useProjectTerminals,
+  type ProjectTerminals,
+} from '@renderer/features/terminals/useProjectTerminals';
 
 export function MainArea() {
   const { loaded, projects, selected } = useProjects();
@@ -18,7 +23,7 @@ export function MainArea() {
   return (
     <main className="flex min-h-0 min-w-0 flex-col">
       {selected ? (
-        <ProjectView project={selected} />
+        <ProjectView key={selected.id} project={selected} />
       ) : (
         <>
           <header className="flex h-12 shrink-0 items-center border-b px-4">
@@ -33,6 +38,7 @@ export function MainArea() {
 
 function ProjectView({ project }: { project: Project }) {
   const { setArchived, startRename } = useProjects();
+  const terminals = useProjectTerminals(project);
   const isArchived = project.status === 'archived';
 
   return (
@@ -40,7 +46,7 @@ function ProjectView({ project }: { project: Project }) {
       <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b px-4">
         <div className="flex min-w-0 items-center gap-3">
           <h1
-            className="truncate text-sm font-semibold"
+            className="max-w-64 shrink-0 truncate text-sm font-semibold"
             title="Rename (F2 in the sidebar)"
             onDoubleClick={() => startRename(project)}
           >
@@ -72,21 +78,54 @@ function ProjectView({ project }: { project: Project }) {
               Restore
             </Button>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {/* span: disabled buttons don't fire the events tooltips need. */}
-              <span tabIndex={0}>
-                <Button size="sm" variant="secondary" disabled>
-                  <TerminalSquare />
-                  New terminal
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Terminals are coming soon</TooltipContent>
-          </Tooltip>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={isArchived}
+            title={isArchived ? 'Restore the project to open terminals' : undefined}
+            onClick={() => void terminals.create()}
+          >
+            <TerminalSquare />
+            New terminal
+          </Button>
         </div>
       </header>
 
+      {terminals.terminals.length > 0 ? (
+        <TerminalsArea terminals={terminals} />
+      ) : (
+        terminals.loaded && <NoTerminalsEmptyState />
+      )}
+    </>
+  );
+}
+
+function TerminalsArea({ terminals }: { terminals: ProjectTerminals }) {
+  return (
+    <>
+      <TerminalTabs
+        terminals={terminals.terminals}
+        activeId={terminals.activeId}
+        onActivate={terminals.activate}
+        onCreate={() => void terminals.create()}
+      />
+      <div className="relative min-h-0 flex-1 bg-[#0a0a0a]">
+        {terminals.terminals.map((terminal) => (
+          <TerminalView
+            key={terminal.id}
+            terminalId={terminal.id}
+            active={terminal.id === terminals.activeId}
+            onExit={(exitCode) => terminals.markExited(terminal.id, exitCode)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function NoTerminalsEmptyState() {
+  return (
+    <>
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="flex max-w-sm flex-col items-center gap-3 text-center">
           <div className="flex size-12 items-center justify-center rounded-xl border bg-card text-muted-foreground">
@@ -94,7 +133,8 @@ function ProjectView({ project }: { project: Project }) {
           </div>
           <h2 className="text-base font-semibold tracking-tight">No terminals open</h2>
           <p className="text-sm text-muted-foreground">
-            Terminals and AI agents for this project will appear here, side by side.
+            Open a terminal to run commands in this project's folder. AI agents will run here too,
+            side by side.
           </p>
           <p className="flex items-center gap-1 text-xs text-muted-foreground">
             Project actions are in the

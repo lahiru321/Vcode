@@ -11,8 +11,10 @@ class FakeHost extends EventEmitter implements HostProcess {
   readonly sent: MainToHost[] = [];
   killed = false;
 
-  postMessage(message: MainToHost): void {
+  readonly transfers: (readonly unknown[] | undefined)[] = [];
+  postMessage(message: MainToHost, transfer?: readonly unknown[]): void {
     this.sent.push(message);
+    this.transfers.push(transfer);
   }
   kill(): boolean {
     this.killed = true;
@@ -140,6 +142,13 @@ describe('request', () => {
     await expect(result).resolves.toEqual({ pid: 1, uptimeMs: 5 });
   });
 
+  it('hands over transferred ports with the request', () => {
+    const sup = running();
+    const port = { fake: 'port' };
+    void sup.request('attach', { sessionId: 's' }, { transfer: [port] });
+    expect(hosts[0]!.transfers.at(-1)).toEqual([port]);
+  });
+
   it('rejects with the host error message', async () => {
     const sup = running();
     const result = sup.request('ping', undefined);
@@ -155,7 +164,7 @@ describe('request', () => {
 
   it('times out, and ignores a late answer', async () => {
     const sup = running();
-    const result = sup.request('ping', undefined, 500);
+    const result = sup.request('ping', undefined, { timeoutMs: 500 });
     const id = hosts[0]!.lastRequestId();
     vi.advanceTimersByTime(500);
     await expect(result).rejects.toThrow(/did not answer "ping" in time/);

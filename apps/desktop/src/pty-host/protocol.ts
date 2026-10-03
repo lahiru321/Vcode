@@ -34,6 +34,8 @@ export interface HostMethods {
   resize: { params: SessionParams & { cols: number; rows: number }; result: null };
   /** Closes the pseudo-terminal, which ends the processes attached to it. */
   kill: { params: SessionParams; result: null };
+  /** Connects the MessagePort sent with this request to the terminal (see TerminalManager.attach). */
+  attach: { params: SessionParams; result: null };
   /** Recent output (bounded), until the screen mirror replaces it in P2-06. */
   output: { params: SessionParams; result: { data: string } };
   list: { params: undefined; result: { sessions: { sessionId: string; pid: number }[] } };

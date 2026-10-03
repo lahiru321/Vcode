@@ -16,7 +16,8 @@ import {
 /** The parts of Electron's UtilityProcess the supervisor uses. */
 export interface HostProcess {
   readonly pid: number | undefined;
-  postMessage(message: MainToHost): void;
+  /** `transfer`: MessagePorts handed over with the message. */
+  postMessage(message: MainToHost, transfer?: readonly unknown[]): void;
   kill(): boolean;
   on(event: 'message', listener: (message: unknown) => void): this;
   on(event: 'exit', listener: (code: number) => void): this;
@@ -135,11 +136,17 @@ export class PtyHostSupervisor extends EventEmitter<SupervisorEvents> {
     this.spawn();
   }
 
-  /** Calls a host method. Rejects with PtyHostError if the host isn't ready, fails or exits. */
+  /**
+   * Calls a host method. Rejects with PtyHostError if the host isn't ready, fails or exits.
+   * `transfer`: MessagePorts to hand over with the request (e.g. for `attach`).
+   */
   request<M extends HostMethod>(
     method: M,
     params: HostParams<M>,
-    timeoutMs = this.options.requestTimeoutMs,
+    {
+      timeoutMs = this.options.requestTimeoutMs,
+      transfer,
+    }: { timeoutMs?: number; transfer?: readonly unknown[] } = {},
   ): Promise<HostResult<M>> {
     const host = this.host;
     if (!host || this.currentState !== 'ready') {
@@ -156,7 +163,7 @@ export class PtyHostSupervisor extends EventEmitter<SupervisorEvents> {
         );
       }, timeoutMs);
       this.pending.set(id, { resolve: resolve as (result: unknown) => void, reject, timer });
-      host.postMessage({ kind: 'request', id, method, params });
+      host.postMessage({ kind: 'request', id, method, params }, transfer);
     });
   }
 

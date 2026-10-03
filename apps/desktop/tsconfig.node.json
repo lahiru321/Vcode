@@ -8,7 +8,6 @@
     "drizzle.config.ts",
     "build/**/*",
     "src/main/**/*",
-    "src/pty-host/**/*",
-    "src/preload/**/*"
+    "src/pty-host/**/*"
   ]
 }

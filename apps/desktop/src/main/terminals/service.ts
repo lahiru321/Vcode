@@ -102,6 +102,30 @@ export async function createTerminal(
   }
 }
 
+/**
+ * Connects `hostPort` (one end of a MessageChannel) to a running terminal in the PTY host; the
+ * caller gives the other end to the renderer. CONFLICT if the terminal has ended.
+ */
+export async function attachTerminal(
+  deps: Pick<TerminalDeps, 'db' | 'host'>,
+  terminalId: string,
+  hostPort: unknown,
+): Promise<void> {
+  const terminal = getTerminal(deps.db, terminalId);
+  if (terminal.status !== 'running') {
+    throw new IpcError('CONFLICT', 'This terminal is no longer running.');
+  }
+  try {
+    await deps.host.request('attach', { sessionId: terminalId }, { transfer: [hostPort] });
+  } catch (error) {
+    const unavailable = error instanceof PtyHostError && error.reason === 'unavailable';
+    throw new IpcError(
+      unavailable ? 'UNAVAILABLE' : 'INTERNAL',
+      `Could not connect to the terminal: ${errorMessage(error)}`,
+    );
+  }
+}
+
 export function getTerminal(db: AppDatabase, id: string): TerminalRow {
   const row = db.select().from(terminalSessions).where(eq(terminalSessions.id, id)).get();
   if (!row) {

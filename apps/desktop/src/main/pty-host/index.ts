@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { APP_NAME } from '@vcode/shared';
-import { utilityProcess } from 'electron';
+import { utilityProcess, type MessagePortMain } from 'electron';
 import { createLogger } from '../logging';
 import { PtyHostSupervisor, type HostProcess } from './supervisor';
 
@@ -37,7 +37,8 @@ function forkHost(): HostProcess {
     get pid() {
       return child.pid;
     },
-    postMessage: (message) => child.postMessage(message),
+    postMessage: (message, transfer) =>
+      child.postMessage(message, transfer as MessagePortMain[] | undefined),
     kill: () => child.kill(),
     on(event: 'message' | 'exit', listener: (value: never) => void) {
       child.on(event as 'exit', listener as (code: number) => void);

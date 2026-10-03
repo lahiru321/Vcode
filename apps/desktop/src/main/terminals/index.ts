@@ -6,7 +6,7 @@ import { ptyHost } from '../pty-host';
 import { loadBaseEnvironment, prepareTerminalEnvironment } from './environment';
 import { endActiveSessions, recordTerminalExit, type TerminalDeps } from './service';
 
-export { createTerminal, listTerminals } from './service';
+export { attachTerminal, createTerminal, listTerminals } from './service';
 
 const log = createLogger('terminals');
 

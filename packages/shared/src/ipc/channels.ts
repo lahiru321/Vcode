@@ -11,6 +11,7 @@ export const INVOKE_CHANNELS = [
   'projects:delete',
   'terminals:list',
   'terminals:create',
+  'terminals:attach',
   'settings:get',
   'settings:set',
   'dialog:pickFolder',
@@ -18,6 +19,15 @@ export const INVOKE_CHANNELS = [
 
 /** Push channels (main → renderer, `webContents.send`). */
 export const EVENT_CHANNELS = ['app:notice'] as const;
+
+/**
+ * Main → renderer, carrying a terminal's MessagePort (`webContents.postMessage` with a transfer
+ * list). Not an event channel: the preload hands the port to the page with window.postMessage,
+ * because ports can't cross the context bridge. The page sees it as a `message` event whose
+ * data has `source: TERMINAL_PORT_MESSAGE`.
+ */
+export const TERMINAL_PORT_CHANNEL = 'terminal:port';
+export const TERMINAL_PORT_MESSAGE = 'vcode:terminal-port';
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

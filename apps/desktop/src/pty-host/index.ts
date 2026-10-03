@@ -1,6 +1,6 @@
 import { spawn } from 'node-pty';
 import type { HostLogLevel, HostMethod, HostMethods, HostToMain, MainToHost } from './protocol';
-import { TerminalManager } from './terminals';
+import { TerminalManager, type TerminalPort } from './terminals';
 
 // PTY host entry: an Electron utility process that will own every pseudo-terminal (V1 doc §11),
 // so a busy or crashing terminal can't freeze the UI or main. Main starts it, restarts it if it
@@ -21,6 +21,8 @@ function log(level: HostLogLevel, msg: string, data?: Record<string, unknown>): 
 type Handlers = {
   [M in HostMethod]: (
     params: HostMethods[M]['params'],
+    /** MessagePorts transferred with the request. */
+    ports: TerminalPort[],
   ) => HostMethods[M]['result'] | Promise<HostMethods[M]['result']>;
 };
 
@@ -37,6 +39,13 @@ const handlers: Handlers = {
     terminals.resize(sessionId, cols, rows);
     return null;
   },
+  attach: ({ sessionId }, [port]) => {
+    if (!port) {
+      throw new Error('attach needs a MessagePort');
+    }
+    terminals.attach(sessionId, port);
+    return null;
+  },
   kill: ({ sessionId }) => {
     terminals.kill(sessionId);
     return null;
@@ -45,15 +54,24 @@ const handlers: Handlers = {
   list: () => ({ sessions: terminals.list() }),
 };
 
-async function handleRequest(id: number, method: HostMethod, params: unknown): Promise<void> {
-  const handler = handlers[method] as ((params: unknown) => unknown) | undefined;
+async function handleRequest(
+  id: number,
+  method: HostMethod,
+  params: unknown,
+  ports: TerminalPort[],
+): Promise<void> {
+  const handler = handlers[method] as
+    ((params: unknown, ports: TerminalPort[]) => unknown) | undefined;
   if (!handler) {
     send({ kind: 'response', id, ok: false, error: { message: `Unknown method: ${method}` } });
     return;
   }
   try {
-    send({ kind: 'response', id, ok: true, result: await handler(params) });
+    send({ kind: 'response', id, ok: true, result: await handler(params, ports) });
   } catch (error) {
+    for (const port of ports) {
+      port.close();
+    }
     const message = error instanceof Error ? error.message : String(error);
     send({ kind: 'response', id, ok: false, error: { message } });
   }
@@ -76,10 +94,10 @@ function shutdown(): void {
   }, 25);
 }
 
-port.on('message', ({ data }: { data: MainToHost }) => {
+port.on('message', ({ data, ports = [] }: { data: MainToHost; ports?: TerminalPort[] }) => {
   switch (data.kind) {
     case 'request':
-      void handleRequest(data.id, data.method, data.params);
+      void handleRequest(data.id, data.method, data.params, ports);
       break;
     case 'shutdown':
       shutdown();
