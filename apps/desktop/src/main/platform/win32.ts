@@ -190,9 +190,19 @@ async function loadUserEnvironment(): Promise<Environment> {
   }
 
   const { machine, user } = JSON.parse(stdout) as { machine: Environment; user: Environment };
+  return mergeEnvironment(base, machine, user);
+}
 
-  // Process variables (USERPROFILE, APPDATA, … from the logon session) are the base; registry
-  // values replace them, user over machine — the same order Windows uses for a new process.
+/**
+ * Process variables (USERPROFILE, APPDATA, … from the logon session) are the base; registry
+ * values replace them, user over machine — the same order Windows uses for a new process.
+ * Names are case-insensitive; the first spelling seen is kept.
+ */
+export function mergeEnvironment(
+  base: Environment,
+  machine: Environment,
+  user: Environment,
+): Environment {
   const merged = new Map<string, [name: string, value: string]>();
   const set = (name: string, value: string): void => {
     const key = name.toUpperCase();
