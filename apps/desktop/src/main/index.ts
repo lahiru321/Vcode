@@ -5,15 +5,18 @@ import { closeDatabase, initDatabase } from './db';
 import { registerIpcHandlers } from './ipc';
 import { loadRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
+import { loadWindowState, trackWindowState } from './window-state';
 
 applySecurityBaseline();
 
+const WINDOW_SIZE = { width: 1280, height: 800, minWidth: 900, minHeight: 600 };
+
 function createMainWindow(): BrowserWindow {
+  const state = loadWindowState(WINDOW_SIZE);
   const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    ...state.bounds,
+    minWidth: WINDOW_SIZE.minWidth,
+    minHeight: WINDOW_SIZE.minHeight,
     show: false,
     title: APP_NAME,
     // Matches the renderer's dark --background token to avoid a flash on load.
@@ -29,7 +32,13 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
-  window.once('ready-to-show', () => window.show());
+  window.once('ready-to-show', () => {
+    if (state.maximized) {
+      window.maximize();
+    }
+    window.show();
+  });
+  trackWindowState(window);
 
   if (!app.isPackaged) {
     // Surface renderer warnings and errors (e.g. CSP violations) in the dev terminal.

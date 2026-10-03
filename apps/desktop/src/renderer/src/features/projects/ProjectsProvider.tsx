@@ -59,13 +59,15 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
 
-  const applyList = useCallback((list: Project[]) => {
+  /** `savedId`: the selection from the last session, used if nothing is selected yet. */
+  const applyList = useCallback((list: Project[], savedId: string | null = null) => {
     setProjects(list);
     setLoadError(null);
     setLoaded(true);
-    setSelectedId((current) =>
-      current && list.some((p) => p.id === current) ? current : defaultSelection(list),
-    );
+    setSelectedId((current) => {
+      const wanted = current ?? savedId;
+      return wanted && list.some((p) => p.id === wanted) ? wanted : defaultSelection(list);
+    });
   }, []);
 
   const applyLoadError = useCallback((error: unknown) => {
@@ -79,8 +81,27 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    invoke('projects:list').then(applyList, applyLoadError);
+    // A settings failure only loses the remembered selection, so it doesn't block the list.
+    const savedId = invoke('settings:get').then(
+      (settings) => settings.selectedProjectId,
+      () => null,
+    );
+    Promise.all([invoke('projects:list'), savedId]).then(
+      ([list, id]) => applyList(list, id),
+      applyLoadError,
+    );
   }, [applyList, applyLoadError]);
+
+  // Remember the selection for the next launch. Skipped until the list has loaded, so the
+  // saved value isn't overwritten by the initial empty selection.
+  useEffect(() => {
+    if (!loaded || loadError) {
+      return;
+    }
+    invoke('settings:set', { selectedProjectId: selectedId }).catch((error: unknown) => {
+      console.warn('Could not save the selected project:', errorMessage(error));
+    });
+  }, [loaded, loadError, selectedId]);
 
   const startAdd = useCallback(async () => {
     try {

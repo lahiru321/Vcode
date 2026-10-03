@@ -66,6 +66,27 @@ export const UpdateProjectRequest = z
   });
 export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequest>;
 
+// Settings the renderer may read and change (V1 doc §20). Each key is one `app_settings` row;
+// main falls back to the default when a row is missing or no longer matches its schema.
+// Main-only state (e.g. window bounds) lives in the same table but is never exposed here.
+
+export const Settings = z.object({
+  /** The project shown in the main area; restored on the next launch. */
+  selectedProjectId: Id.nullable(),
+});
+export type Settings = z.infer<typeof Settings>;
+export type SettingKey = keyof Settings;
+
+export const SETTING_DEFAULTS: Settings = {
+  selectedProjectId: null,
+};
+
+/** Only the given keys are changed. */
+export const SetSettingsRequest = z
+  .strictObject(Settings.shape)
+  .partial()
+  .refine((request) => Object.keys(request).length > 0, { message: 'Nothing to update' });
+
 /** `path` is null when the user cancels the dialog. */
 export const PickFolderResponse = z.object({ path: z.string().nullable() });
 
@@ -76,6 +97,8 @@ export const invokeContracts = {
   'projects:create': { request: CreateProjectRequest, response: Project },
   'projects:update': { request: UpdateProjectRequest, response: Project },
   'projects:delete': { request: ProjectIdRequest, response: z.object({ id: Id }) },
+  'settings:get': { request: NoPayload, response: Settings },
+  'settings:set': { request: SetSettingsRequest, response: Settings },
   'dialog:pickFolder': { request: NoPayload, response: PickFolderResponse },
 } satisfies Record<InvokeChannel, { request: z.ZodType; response: z.ZodType }>;
 

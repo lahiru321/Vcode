@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P1 — Foundation
 
 **Next up:**
-1. `P1-13` App settings + window state
-2. `P1-14` Logging
-3. `P1-15` Vitest + unit tests
+1. `P1-14` Logging
+2. `P1-15` Vitest + unit tests
+3. `P1-16` CI on Windows + macOS
 
 ---
 
@@ -99,7 +99,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-02:* `dialog:pickFolder` (modal to the calling window; `{ path: null }` on cancel). `src/main/fs/folders.ts` `resolveExistingFolder`: absolute only, `realpath` (true casing + junctions resolved, so the same folder can't be added twice), must be a folder, not a drive root. `src/main/git/detect.ts` reads `.git` files directly (no `git` process, so nothing from the repo's config runs): default branch = `origin/HEAD` target, else the checked-out branch; handles linked worktrees (`.git` file + `commondir`). Only a repo **root** is detected, not a subfolder of a repo. Verified end-to-end through `window.vcode` in the built app, including restart persistence. The real native dialog still needs a manual click-through (P1-12).
 - [x] **P1-12** · Projects UI: sidebar list, create / edit / delete, empty state · `M`
   - *2026-10-02:* `src/renderer/src/features/projects/`: `ProjectsProvider` (list, selection, dialogs; plain React state, no query library), `ProjectList` (sidebar rows with a ⋯ menu: Rename / Archive·Restore / Remove; F2 renames and Delete removes the focused row; collapsible Archived group), `ProjectDialogs` (Add: folder picker → name pre-filled from the folder; Rename; Remove confirm that says files stay on disk). IPC errors are shown inline in dialogs, toasts (sonner) otherwise. Main area: project header (name, branch badge, path, Archived + Restore) or the first-project empty state. shadcn added: dialog, alert-dialog, input, label, dropdown-menu, sonner, badge (sonner pinned to dark; `next-themes` removed). Selection is not remembered across restarts yet (P1-13). Checked by driving the built app with real mouse/keyboard events and screenshots of every step.
-- [ ] **P1-13** · App settings store (`app_settings`) + window size/position persistence · `S`
+- [x] **P1-13** · App settings store (`app_settings`) + window size/position persistence · `S`
+  - *2026-10-03:* `src/main/settings/store.ts`: `readSetting` / `writeSetting` over `app_settings`; every read is checked against a zod schema and falls back to the default if the row is missing, isn't valid JSON or doesn't match (logged as a warning). Values are `JSON.stringify`'d by hand, because Drizzle's json mode writes `null` as SQL NULL and the column is NOT NULL. Renderer settings = `Settings` + `SETTING_DEFAULTS` in `shared/src/ipc/contracts.ts`, one row per key; `settings:get` returns all of them, `settings:set` takes a strict partial (unknown keys and empty patches rejected) and writes it in one transaction. First setting: `selectedProjectId` — `ProjectsProvider` restores it on launch (falls back to the first active project if it's gone) and saves every change. Window state (`src/main/window-state.ts`, key `window.main`, main-only): normal bounds + maximized, saved 500 ms after move/resize/maximize and on close; minimized and full-screen aren't saved. On launch the saved position is reused only if 120×40 px of the title bar is on some display's work area, otherwise the window is centred on the primary display with its size capped to the work area. Checked over 4 launches of the built app with a temp `userData` (24 checks): size/position/maximized restored, unmaximize returns to the saved size, an off-screen position comes back centred, the selected project is restored, a deleted one falls back, corrupt rows fall back to defaults, IPC validation.
 - [ ] **P1-14** · Logging with pino → `userData/logs` · `S`
 - [ ] **P1-15** · Vitest + unit tests: platform layer (port the P1-07 manual checks: PATHEXT resolution, cmd.exe argument round-trip, tree kill, registry env merge), path validation, projects service, DB (migrations, FK cascades — better-sqlite3 runs in plain Node), `isSafeExternalUrl`, IPC registry (sender check, request/response validation) · `M`
 - [ ] **P1-16** · GitHub Actions on `windows-latest` + `macos-latest`: lint, typecheck, unit tests · `S`

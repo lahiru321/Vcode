@@ -9,6 +9,8 @@ export const INVOKE_CHANNELS = [
   'projects:create',
   'projects:update',
   'projects:delete',
+  'settings:get',
+  'settings:set',
   'dialog:pickFolder',
 ] as const;
 
