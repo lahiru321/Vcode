@@ -3,12 +3,15 @@ import { eq, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { AppDatabase } from '../db';
 import { appSettings } from '../db/schema';
+import { createLogger } from '../logging';
 
 // Key/value store over `app_settings` (V1 doc §8). Every value is validated when read, so a row
 // written by an older version, or edited by hand, falls back to the default instead of
 // reaching the app. Functions take the database so tests can pass their own.
 
 type Writable = Pick<AppDatabase, 'insert'>;
+
+const log = createLogger('settings');
 
 /** Reads one value; `fallback` if the row is missing or doesn't match `schema`. */
 export function readSetting<T>(db: AppDatabase, key: string, schema: z.ZodType<T>, fallback: T): T {
@@ -17,7 +20,7 @@ export function readSetting<T>(db: AppDatabase, key: string, schema: z.ZodType<T
     row = db.select().from(appSettings).where(eq(appSettings.key, key)).get();
   } catch (error) {
     // Drizzle parses the JSON column while reading, so a corrupt value throws here.
-    console.warn(`[settings] could not read "${key}":`, error);
+    log.warn({ key, err: error }, 'could not read a setting; using the default');
     return fallback;
   }
   if (!row) {
@@ -25,7 +28,7 @@ export function readSetting<T>(db: AppDatabase, key: string, schema: z.ZodType<T
   }
   const parsed = schema.safeParse(row.valueJson);
   if (!parsed.success) {
-    console.warn(`[settings] ignoring invalid value for "${key}"`);
+    log.warn({ key, issues: parsed.error.issues }, 'invalid setting; using the default');
     return fallback;
   }
   return parsed.data;

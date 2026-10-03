@@ -1,10 +1,13 @@
 import { screen, type BrowserWindow, type Rectangle } from 'electron';
 import { z } from 'zod';
 import { getDatabase } from './db';
+import { createLogger } from './logging';
 import { readSetting, writeSetting } from './settings/store';
 
 // Remembers the main window's size, position and maximized state (V1 doc §10 "Window state").
 // Main-only: stored in `app_settings` but not part of the renderer's settings.
+
+const log = createLogger('window-state');
 
 const SETTING_KEY = 'window.main';
 const SAVE_DELAY_MS = 500;
@@ -95,7 +98,7 @@ export function trackWindowState(window: BrowserWindow): void {
     try {
       writeSetting(getDatabase(), SETTING_KEY, state);
     } catch (error) {
-      console.error('[window-state] could not save:', error);
+      log.error({ err: error }, 'could not save the window state');
     }
   };
 

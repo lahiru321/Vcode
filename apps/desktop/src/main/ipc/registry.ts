@@ -11,7 +11,10 @@ import {
 } from '@vcode/shared';
 import { BrowserWindow, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { z } from 'zod';
+import { createLogger } from '../logging';
 import { isRendererUrl } from '../renderer';
+
+const log = createLogger('ipc');
 
 type Contract<C extends InvokeChannel> = (typeof invokeContracts)[C];
 
@@ -52,7 +55,10 @@ export function handle<C extends InvokeChannel>(channel: C, handler: Handler<C>)
 
   ipcMain.handle(channel, async (event, payload: unknown): Promise<IpcResult<unknown>> => {
     if (!isTrustedSender(event)) {
-      console.warn(`[ipc] rejected ${channel} from ${event.senderFrame?.url ?? 'unknown frame'}`);
+      log.warn(
+        { channel, url: event.senderFrame?.url },
+        'rejected a call from an untrusted sender',
+      );
       return failure('FORBIDDEN_SENDER', 'This sender may not use IPC.');
     }
 
@@ -71,7 +77,7 @@ export function handle<C extends InvokeChannel>(channel: C, handler: Handler<C>)
         return failure(error.code, error.message);
       }
       // Includes responses that fail their schema: a bug in main, not the caller's fault.
-      console.error(`[ipc] ${channel} failed:`, error);
+      log.error({ channel, err: error }, 'handler failed');
       return failure('INTERNAL', 'Something went wrong. See the app log for details.');
     }
   });
