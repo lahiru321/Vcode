@@ -13,6 +13,13 @@ export default defineConfig({
   main: {
     build: {
       externalizeDeps: { exclude: workspacePackages },
+      rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          // The PTY host utility process (src/main/pty-host forks out/main/pty-host.js).
+          'pty-host': resolve('src/pty-host/index.ts'),
+        },
+      },
     },
     plugins: [copyMigrations()],
   },

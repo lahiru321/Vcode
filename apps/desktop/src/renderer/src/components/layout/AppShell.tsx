@@ -1,6 +1,7 @@
 import { Toaster } from '@renderer/components/ui/sonner';
 import { TooltipProvider } from '@renderer/components/ui/tooltip';
 import { ProjectsProvider } from '@renderer/features/projects/ProjectsProvider';
+import { AppNotices } from './AppNotices';
 import { MainArea } from './MainArea';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
@@ -16,6 +17,7 @@ export function AppShell() {
         </div>
       </ProjectsProvider>
       <Toaster position="bottom-right" />
+      <AppNotices />
     </TooltipProvider>
   );
 }

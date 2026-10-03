@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import { APP_NAME } from '@vcode/shared';
 import { app, BrowserWindow, dialog } from 'electron';
 import { closeDatabase, initDatabase } from './db';
-import { registerIpcHandlers } from './ipc';
+import { broadcastEvent, registerIpcHandlers } from './ipc';
 import { closeLogging, createLogger, initLogging, levelFromEnv } from './logging';
+import { ptyHost } from './pty-host';
 import { loadRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
 import { loadWindowState, trackWindowState } from './window-state';
@@ -107,7 +108,27 @@ ${error instanceof Error ? error.message : String(error)}`,
   }
 
   registerIpcHandlers();
+  startPtyHost();
   createMainWindow();
+});
+
+function startPtyHost(): void {
+  ptyHost.on('failed', () =>
+    broadcastEvent('app:notice', {
+      level: 'error',
+      message: `Terminals are unavailable: the terminal host keeps crashing. Restart ${APP_NAME} to try again.`,
+    }),
+  );
+  ptyHost.start();
+}
+
+// Let the PTY host stop its terminals before the app exits (it gets a few seconds).
+app.on('before-quit', (event) => {
+  if (ptyHost.state === 'idle' || ptyHost.state === 'stopped') {
+    return;
+  }
+  event.preventDefault();
+  void ptyHost.stop().finally(() => app.quit());
 });
 
 app.on('will-quit', () => {
