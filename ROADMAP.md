@@ -31,11 +31,12 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P2 — Terminal Engine
+**Current phase:** P3 — First CLI Agent
 
 **Next up:**
-1. Check P2's **Done when** list in the app (all P2 tasks are done)
-2. Start P3 (First CLI Agent)
+1. `P3-01` `AgentAdapter` interface
+2. `P3-02` `ClaudeAdapter`: find, validate and build the command
+3. `P3-03` Agents service + IPC (minimal create / list)
 
 ---
 
@@ -44,7 +45,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | # | Phase | Goal | Size | Status |
 |---|---|---|---|---|
 | P1 | Foundation | App opens, projects persist, CI green on Windows + macOS | L | Done |
-| P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | To do |
+| P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | Done |
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | To do |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | To do |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | To do |
@@ -341,3 +342,4 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-02** — Specs moved to `docs/`. TypeScript pinned to 6.0.x until typescript-eslint supports TS 7 (revisit later).
 - **2026-10-02** — App renamed **AI Agent Hub → Vcode** (product name, window title, `%APPDATA%\Vcode\vcode.db`, `@vcode/*` packages, `window.vcode` bridge). The spec documents keep their original names. GitHub: https://github.com/lahiru321/Vcode
 - **2026-10-03** — **P1 Foundation done** (P1-13 … P1-16). All three Done-when checks pass: the app window opens, projects persist across restarts, CI is green on Windows and macOS. P1-09 note corrected (better-sqlite3 build scripts are now skipped).
+- **2026-10-09** — **P2 Terminal Engine done** (P2-05 … P2-07, P2-09 … P2-11). Marked done by the owner after the Done-when checks (typing with live output, screen kept on Ctrl+R, Stop ends child processes, no orphans after quit). Also fixed on the way: typing into a terminal did nothing in dev (double attach under React StrictMode), and terminals left `running` by an earlier run could not be attached.
