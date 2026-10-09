@@ -1,4 +1,6 @@
-// CLI agent adapters (Claude Code, Gemini CLI, Codex CLI, custom).
-// The AgentAdapter interface is added in P3-01.
+// CLI agent adapters (Claude Code now; Gemini CLI, Codex CLI and custom CLIs in P4).
 
-export {};
+export * from './types';
+export { CliAdapter, parseVersion, VALIDATE_TIMEOUT_MS } from './cli-adapter';
+export { ClaudeAdapter } from './claude';
+export { getAdapter } from './registry';

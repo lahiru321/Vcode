@@ -38,6 +38,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@vcode/adapters':
+        specifier: workspace:^
+        version: link:../../packages/adapters
       '@vcode/shared':
         specifier: workspace:^
         version: link:../../packages/shared
