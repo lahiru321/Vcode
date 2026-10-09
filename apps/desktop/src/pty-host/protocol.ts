@@ -36,7 +36,7 @@ export interface HostMethods {
   kill: { params: SessionParams; result: null };
   /** Connects the MessagePort sent with this request to the terminal (see TerminalManager.attach). */
   attach: { params: SessionParams; result: null };
-  /** Recent output (bounded), until the screen mirror replaces it in P2-06. */
+  /** The terminal's current screen (from its mirror), as escape sequences that redraw it. */
   output: { params: SessionParams; result: { data: string } };
   list: { params: undefined; result: { sessions: { sessionId: string; pid: number }[] } };
 }

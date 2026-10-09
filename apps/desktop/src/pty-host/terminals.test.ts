@@ -83,15 +83,26 @@ describe('TerminalManager (fake pty)', () => {
     expect(fake.calls.kill).toHaveBeenCalled();
   });
 
-  it('keeps recent output, bounded', () => {
+  it('keeps the current screen, not the raw output', async () => {
     const fake = fakePty();
     const manager = new TerminalManager(() => fake.pty, vi.fn());
     manager.spawn(PARAMS);
-    fake.data('hello ');
-    fake.data('world');
-    expect(manager.output('s1')).toBe('hello world');
-    fake.data('x'.repeat(300 * 1024));
-    expect(manager.output('s1')).toHaveLength(256 * 1024);
+    fake.data('hello\r\nworld');
+    await vi.waitFor(() => expect(manager.output('s1')).toBe('hello\r\nworld'));
+    fake.data('\x1b[2J\x1b[Hcleared'); // clear the screen, then write
+    await vi.waitFor(() => expect(manager.output('s1')).toContain('cleared'));
+    expect(manager.output('s1')).not.toContain('world');
+  });
+
+  it('resizes the pty and the screen', async () => {
+    const fake = fakePty();
+    const manager = new TerminalManager(() => fake.pty, vi.fn());
+    manager.spawn(PARAMS);
+    manager.resize('s1', 10, 5);
+    expect(fake.calls.resize).toHaveBeenCalledWith(10, 5);
+    fake.data('0123456789abc'); // wraps at 10 columns
+    await vi.waitFor(() => expect(manager.output('s1')).toContain('abc'));
+    expect(manager.output('s1')).toMatch(/0123456789(\r\n)?abc/);
   });
 
   it('reports the exit and forgets the terminal', () => {
@@ -159,50 +170,81 @@ describe('TerminalManager.attach', () => {
     return { fake, manager };
   }
 
-  it('replays recent output, then forwards new output', () => {
-    const { fake, manager } = attached();
-    fake.data('before ');
+  /** Lets the screen mirror process its output (it parses on a timer). */
+  const parse = () => vi.advanceTimersByTimeAsync(1);
+
+  /** Attaches a port and waits until the screen has been sent. */
+  async function attach(manager: TerminalManager) {
     const port = new FakePort();
     manager.attach('s1', port as unknown as TerminalPort);
+    await parse();
+    return port;
+  }
+
+  it('sends the current screen, then forwards new output', async () => {
+    const { fake, manager } = attached();
+    fake.data('one\r\ntwo');
+    const port = await attach(manager);
     expect(port.started).toBe(true);
-    fake.data('after');
-    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    fake.data('three');
+    await vi.advanceTimersByTimeAsync(OUTPUT_BATCH_MS);
     expect(port.posted).toEqual([
-      { type: 'data', data: 'before ' },
-      { type: 'data', data: 'after' },
+      { type: 'data', data: 'one\r\ntwo' },
+      { type: 'data', data: 'three' },
     ]);
   });
 
-  it('sends output in batches', () => {
+  it('sends the screen as it is now, not the output that led to it', async () => {
     const { fake, manager } = attached();
+    fake.data('old text\x1b[2J\x1b[H\x1b[31mred\x1b[0m');
+    const port = await attach(manager);
+    expect(port.posted).toHaveLength(1);
+    const { data } = port.posted[0] as { data: string };
+    expect(data).toContain('\x1b[31mred');
+    expect(data).not.toContain('old text');
+  });
+
+  it('holds new output back until the screen has been sent', async () => {
+    const { fake, manager } = attached();
+    fake.data('screen');
     const port = new FakePort();
     manager.attach('s1', port as unknown as TerminalPort);
+    fake.data(' more'); // arrives while the screen is being prepared
+    await vi.advanceTimersByTimeAsync(OUTPUT_BATCH_MS);
+    expect(port.posted).toEqual([
+      { type: 'data', data: 'screen' },
+      { type: 'data', data: ' more' },
+    ]);
+  });
+
+  it('sends output in batches', async () => {
+    const { fake, manager } = attached();
+    const port = await attach(manager);
     fake.data('a');
     fake.data('b');
     expect(port.posted).toEqual([]);
-    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    await vi.advanceTimersByTimeAsync(OUTPUT_BATCH_MS);
     fake.data('c');
-    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    await vi.advanceTimersByTimeAsync(OUTPUT_BATCH_MS);
     expect(port.posted).toEqual([
       { type: 'data', data: 'ab' },
       { type: 'data', data: 'c' },
     ]);
   });
 
-  it('pauses the process while the renderer is behind, and resumes it once it catches up', () => {
+  it('pauses the process while the renderer is behind, and resumes it once it catches up', async () => {
     const { fake, manager } = attached();
-    const port = new FakePort();
-    manager.attach('s1', port as unknown as TerminalPort);
+    const port = await attach(manager);
     const chunk = 'x'.repeat(FLOW_HIGH_WATERMARK / 2);
 
     fake.data(chunk);
-    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    await vi.advanceTimersByTimeAsync(OUTPUT_BATCH_MS);
     expect(fake.calls.pause).not.toHaveBeenCalled();
     fake.data(chunk);
     fake.data('y'); // still waiting for its batch, but counts
     expect(fake.calls.pause).toHaveBeenCalledOnce();
     expect(manager.isPaused('s1')).toBe(true);
-    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    await vi.advanceTimersByTimeAsync(OUTPUT_BATCH_MS);
 
     port.fromRenderer({ type: 'ack', chars: chunk.length });
     expect(fake.calls.resume).not.toHaveBeenCalled(); // still above the low watermark
@@ -211,21 +253,22 @@ describe('TerminalManager.attach', () => {
     expect(manager.isPaused('s1')).toBe(false);
   });
 
-  it('counts the replay as unacknowledged output', () => {
+  it('counts the screen it sends as unacknowledged output', async () => {
     const { fake, manager } = attached();
-    fake.data('x'.repeat(FLOW_HIGH_WATERMARK + 1));
+    // More than the high watermark even after scrolling off the 24-row screen.
+    fake.data('x'.repeat(80).concat('\r\n').repeat(2000));
     expect(fake.calls.pause).not.toHaveBeenCalled(); // nobody attached: no back-pressure
-    const port = new FakePort();
-    manager.attach('s1', port as unknown as TerminalPort);
+    const port = await attach(manager);
+    const { data } = port.posted[0] as { data: string };
+    expect(data.length).toBeGreaterThan(FLOW_HIGH_WATERMARK);
     expect(fake.calls.pause).toHaveBeenCalledOnce();
-    port.fromRenderer({ type: 'ack', chars: FLOW_HIGH_WATERMARK + 1 });
+    port.fromRenderer({ type: 'ack', chars: data.length });
     expect(fake.calls.resume).toHaveBeenCalledOnce();
   });
 
-  it('resumes a paused process when the renderer goes away', () => {
+  it('resumes a paused process when the renderer goes away', async () => {
     const { fake, manager } = attached();
-    const port = new FakePort();
-    manager.attach('s1', port as unknown as TerminalPort);
+    const port = await attach(manager);
     fake.data('x'.repeat(FLOW_HIGH_WATERMARK + 1));
     expect(manager.isPaused('s1')).toBe(true);
     port.close();
@@ -233,17 +276,15 @@ describe('TerminalManager.attach', () => {
     expect(manager.isPaused('s1')).toBe(false);
   });
 
-  it('sends nothing on attach when there is no output yet', () => {
+  it('sends nothing on attach when there is no output yet', async () => {
     const { manager } = attached();
-    const port = new FakePort();
-    manager.attach('s1', port as unknown as TerminalPort);
+    const port = await attach(manager);
     expect(port.posted).toEqual([]);
   });
 
-  it('passes valid input and resize to the pty and drops everything else', () => {
+  it('passes valid input and resize to the pty and drops everything else', async () => {
     const { fake, manager } = attached();
-    const port = new FakePort();
-    manager.attach('s1', port as unknown as TerminalPort);
+    const port = await attach(manager);
     port.fromRenderer({ type: 'input', data: 'dir\r' });
     port.fromRenderer({ type: 'resize', cols: 120, rows: 40 });
     port.fromRenderer({ type: 'resize', cols: 0, rows: 40 });
@@ -253,35 +294,35 @@ describe('TerminalManager.attach', () => {
     expect(fake.calls.resize).toHaveBeenCalledExactlyOnceWith(120, 40);
   });
 
-  it('replaces an earlier connection', () => {
+  it('replaces an earlier connection', async () => {
     const { fake, manager } = attached();
     const first = new FakePort();
-    const second = new FakePort();
     manager.attach('s1', first as unknown as TerminalPort);
-    manager.attach('s1', second as unknown as TerminalPort);
+    const second = await attach(manager); // before the first got its screen
     expect(first.closed).toBe(true);
     first.fromRenderer({ type: 'input', data: 'stale' });
     fake.data('x');
-    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    await vi.advanceTimersByTimeAsync(OUTPUT_BATCH_MS);
     expect(fake.calls.write).not.toHaveBeenCalled();
+    expect(first.posted).toEqual([]);
     expect(second.posted).toEqual([{ type: 'data', data: 'x' }]);
     expect(manager.isAttached('s1')).toBe(true);
   });
 
-  it('forgets a connection the renderer closed, and keeps buffering', () => {
+  it('forgets a connection the renderer closed, and keeps the screen', async () => {
     const { fake, manager } = attached();
-    const port = new FakePort();
-    manager.attach('s1', port as unknown as TerminalPort);
+    const port = await attach(manager);
     port.close();
     expect(manager.isAttached('s1')).toBe(false);
     fake.data('later');
+    await parse();
     expect(manager.output('s1')).toBe('later');
+    expect(port.posted).toEqual([]);
   });
 
-  it('sends the last output, then tells the renderer the process exited and closes the port', () => {
+  it('sends the last output, then tells the renderer the process exited and closes the port', async () => {
     const { fake, manager } = attached();
-    const port = new FakePort();
-    manager.attach('s1', port as unknown as TerminalPort);
+    const port = await attach(manager);
     fake.data('bye');
     fake.exit(2);
     expect(port.posted).toEqual([
@@ -289,8 +330,26 @@ describe('TerminalManager.attach', () => {
       { type: 'exit', exitCode: 2, signal: null },
     ]);
     expect(port.closed).toBe(true);
-    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    await vi.advanceTimersByTimeAsync(OUTPUT_BATCH_MS);
     expect(port.posted).toHaveLength(2);
+  });
+
+  it('sends the screen before the exit when the process ends during attach', async () => {
+    const onExit = vi.fn();
+    const fake = fakePty();
+    const manager = new TerminalManager(() => fake.pty, onExit);
+    manager.spawn(PARAMS);
+    fake.data('last words');
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    fake.exit(0);
+    expect(onExit).toHaveBeenCalledOnce(); // main is told right away
+    await parse();
+    expect(port.posted).toEqual([
+      { type: 'data', data: 'last words' },
+      { type: 'exit', exitCode: 0, signal: null },
+    ]);
+    expect(port.closed).toBe(true);
   });
 
   it('refuses an unknown terminal', () => {

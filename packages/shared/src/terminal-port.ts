@@ -18,6 +18,9 @@ export type TerminalClientMessage =
 /** Largest input accepted in one message (a big paste is split by the renderer). */
 export const MAX_TERMINAL_INPUT = 1024 * 1024;
 
+/** Lines kept above the screen, by the terminal view and by the PTY host's screen mirror. */
+export const TERMINAL_SCROLLBACK = 5000;
+
 /** Output is sent to the renderer in batches, at most this often (V1 doc §11 "Back-pressure"). */
 export const OUTPUT_BATCH_MS = 16;
 /** Sent but not yet drawn output above which the process is paused… */

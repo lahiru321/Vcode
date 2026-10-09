@@ -1,5 +1,6 @@
 import {
   MAX_TERMINAL_INPUT,
+  TERMINAL_SCROLLBACK,
   type TerminalClientMessage,
   type TerminalHostMessage,
 } from '@vcode/shared';
@@ -71,7 +72,7 @@ export function TerminalView({ terminalId, active, onExit }: TerminalViewProps) 
       fontSize: 13,
       lineHeight: 1.2,
       cursorBlink: true,
-      scrollback: 5000,
+      scrollback: TERMINAL_SCROLLBACK,
       theme: THEME,
     });
     const fitAddon = new FitAddon();

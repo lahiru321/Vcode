@@ -6,6 +6,7 @@ import {
   type TerminalHostMessage,
 } from '@vcode/shared/terminal-port';
 import type { IPty, IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
+import { ScreenMirror } from './mirror';
 import type { SpawnParams } from './protocol';
 
 // Every pseudo-terminal the host owns, keyed by terminal_sessions id. node-pty's `spawn` is
@@ -32,14 +33,14 @@ export interface TerminalPort {
   close(): void;
 }
 
-/** Recent output kept per terminal until the screen mirror (P2-06) replaces it. */
-const MAX_BUFFERED_OUTPUT = 256 * 1024;
-
 interface Terminal {
   pty: IPty;
-  output: string;
+  /** The current screen, for renderers that attach later. */
+  mirror: ScreenMirror;
   /** The renderer's connection, if one is attached. */
   port?: TerminalPort;
+  /** Set while the screen is being sent to a new renderer; new output waits behind it. */
+  replay?: Promise<void>;
   /** Output waiting for the next batch to the renderer. */
   pending: string;
   flushTimer?: ReturnType<typeof setTimeout>;
@@ -73,14 +74,17 @@ export class TerminalManager {
       cwd,
       env,
     });
-    const terminal: Terminal = { pty, output: '', pending: '', unacked: 0, paused: false };
+    const terminal: Terminal = {
+      pty,
+      mirror: new ScreenMirror(cols, rows),
+      pending: '',
+      unacked: 0,
+      paused: false,
+    };
     this.terminals.set(sessionId, terminal);
 
     pty.onData((data) => {
-      terminal.output += data;
-      if (terminal.output.length > MAX_BUFFERED_OUTPUT) {
-        terminal.output = terminal.output.slice(-MAX_BUFFERED_OUTPUT);
-      }
+      terminal.mirror.write(data);
       if (!terminal.port) {
         return;
       }
@@ -90,12 +94,21 @@ export class TerminalManager {
     });
     pty.onExit(({ exitCode, signal }) => {
       this.terminals.delete(sessionId);
-      flush(terminal);
       // node-pty reports signal 0 when there was none.
       const exit = { sessionId, exitCode, signal: signal ? signal : null };
-      if (terminal.port) {
-        terminal.port.postMessage({ type: 'exit', exitCode: exit.exitCode, signal: exit.signal });
-        terminal.port.close();
+      const tellRenderer = (): void => {
+        flush(terminal);
+        if (terminal.port) {
+          terminal.port.postMessage({ type: 'exit', exitCode: exit.exitCode, signal: exit.signal });
+          terminal.port.close();
+        }
+        terminal.mirror.dispose();
+      };
+      // A renderer that is just attaching gets its screen first.
+      if (terminal.replay) {
+        void terminal.replay.then(tellRenderer);
+      } else {
+        tellRenderer();
       }
       this.onExit(exit);
     });
@@ -103,14 +116,14 @@ export class TerminalManager {
   }
 
   /**
-   * Connects a renderer to the terminal: recent output is sent first, then everything new.
+   * Connects a renderer to the terminal: the current screen is sent first, then everything new.
    * A terminal has one connection; attaching again (e.g. after a UI reload) replaces it.
    * Messages from the renderer are untrusted and dropped unless well-formed.
    */
   attach(sessionId: string, port: TerminalPort): void {
     const terminal = this.get(sessionId);
     const previous = terminal.port;
-    // The replay below includes anything still waiting for a batch.
+    // The screen sent below includes anything still waiting for a batch.
     resetFlow(terminal);
     terminal.port = port;
     previous?.close();
@@ -125,7 +138,7 @@ export class TerminalManager {
           terminal.pty.write(message.data);
           break;
         case 'resize':
-          terminal.pty.resize(message.cols, message.rows);
+          resize(terminal, message.cols, message.rows);
           break;
         case 'ack':
           terminal.unacked = Math.max(0, terminal.unacked - message.chars);
@@ -136,17 +149,31 @@ export class TerminalManager {
     port.on('close', () => {
       if (terminal.port === port) {
         terminal.port = undefined;
-        // Nobody is drawing: let the process run; output keeps going to the buffer.
+        // Nobody is drawing: let the process run; the mirror keeps the screen.
         resetFlow(terminal);
         updateFlow(terminal);
       }
     });
     port.start();
-    if (terminal.output) {
-      port.postMessage({ type: 'data', data: terminal.output });
-      terminal.unacked = terminal.output.length;
-    }
-    updateFlow(terminal);
+
+    // Output that arrives from now on waits in `pending` until the screen has been sent.
+    const replay = terminal.mirror.snapshot().then((screen) => {
+      if (terminal.replay === replay) {
+        terminal.replay = undefined;
+      }
+      if (terminal.port !== port) {
+        return; // replaced or closed meanwhile
+      }
+      if (screen) {
+        port.postMessage({ type: 'data', data: screen });
+        terminal.unacked += screen.length;
+      }
+      if (terminal.pending) {
+        terminal.flushTimer ??= setTimeout(() => flush(terminal), OUTPUT_BATCH_MS);
+      }
+      updateFlow(terminal);
+    });
+    terminal.replay = replay;
   }
 
   write(sessionId: string, data: string): void {
@@ -154,11 +181,12 @@ export class TerminalManager {
   }
 
   resize(sessionId: string, cols: number, rows: number): void {
-    this.get(sessionId).pty.resize(cols, rows);
+    resize(this.get(sessionId), cols, rows);
   }
 
+  /** The current screen, as escape sequences (output still being parsed is not included). */
   output(sessionId: string): string {
-    return this.get(sessionId).output;
+    return this.get(sessionId).mirror.serialize();
   }
 
   /** Closes the terminal. Its `exit` is reported once the process has ended. */
@@ -199,10 +227,18 @@ export class TerminalManager {
   }
 }
 
+function resize(terminal: Terminal, cols: number, rows: number): void {
+  terminal.pty.resize(cols, rows);
+  terminal.mirror.resize(cols, rows);
+}
+
 /** Sends the waiting output as one message (V1 doc §11 "Back-pressure"). */
 function flush(terminal: Terminal): void {
   clearTimeout(terminal.flushTimer);
   terminal.flushTimer = undefined;
+  if (terminal.replay) {
+    return; // sent once the screen has gone out
+  }
   if (!terminal.pending || !terminal.port) {
     terminal.pending = '';
     return;
