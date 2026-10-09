@@ -10,7 +10,7 @@ export function registerTerminalHandlers(): void {
 
   // One end of a new channel goes to the PTY host, the other to the window that asked (and
   // only to it): terminal data then flows between them without passing through main.
-  handle('terminals:attach', async ({ terminalId }, { sender }) => {
+  handle('terminals:attach', async ({ terminalId, attachId }, { sender }) => {
     const { port1: hostPort, port2: rendererPort } = new MessageChannelMain();
     try {
       await attachTerminal(terminalDeps(), terminalId, hostPort);
@@ -18,7 +18,7 @@ export function registerTerminalHandlers(): void {
       rendererPort.close();
       throw error;
     }
-    sender.postMessage(TERMINAL_PORT_CHANNEL, { terminalId }, [rendererPort]);
+    sender.postMessage(TERMINAL_PORT_CHANNEL, { attachId }, [rendererPort]);
     return { terminalId };
   });
 }

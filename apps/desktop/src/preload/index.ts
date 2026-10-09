@@ -50,9 +50,9 @@ contextBridge.exposeInMainWorld('vcode', api);
 
 // Terminal MessagePorts (`terminals:attach`) can't cross the context bridge, so they are handed
 // to the page with window.postMessage — this window only, which the page checks.
-ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, payload: { terminalId: string }) => {
+ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, payload: { attachId: string }) => {
   window.postMessage(
-    { source: TERMINAL_PORT_MESSAGE, terminalId: payload.terminalId },
+    { source: TERMINAL_PORT_MESSAGE, attachId: payload.attachId },
     '*',
     event.ports,
   );

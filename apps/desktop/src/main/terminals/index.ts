@@ -4,7 +4,12 @@ import { createLogger } from '../logging';
 import { platform } from '../platform';
 import { ptyHost } from '../pty-host';
 import { loadBaseEnvironment, prepareTerminalEnvironment } from './environment';
-import { endActiveSessions, recordTerminalExit, type TerminalDeps } from './service';
+import {
+  endActiveSessions,
+  failStaleSessions,
+  recordTerminalExit,
+  type TerminalDeps,
+} from './service';
 
 export { attachTerminal, createTerminal, listTerminals } from './service';
 
@@ -31,6 +36,10 @@ export function terminalDeps(): TerminalDeps {
 
 /** Keeps terminal_sessions in step with the PTY host. Call before `ptyHost.start()`. */
 export function trackTerminalSessions(): void {
+  const stale = failStaleSessions(getDatabase());
+  if (stale > 0) {
+    log.warn({ count: stale }, 'marked terminals from an earlier run as failed');
+  }
   ptyHost.on('terminalExit', (exit) =>
     // While the host shuts down, it is the one closing the terminals.
     recordTerminalExit(getDatabase(), exit, ptyHost.state === 'stopping' ? 'stopped' : 'exited'),

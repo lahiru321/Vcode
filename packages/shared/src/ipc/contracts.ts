@@ -102,8 +102,11 @@ export type CreateTerminalRequest = z.infer<typeof CreateTerminalRequest>;
 
 export const ListTerminalsRequest = z.strictObject({ projectId: Id });
 
-/** Sends the terminal's MessagePort to the calling window on TERMINAL_PORT_CHANNEL. */
-export const AttachTerminalRequest = z.strictObject({ terminalId: Id });
+/**
+ * Sends the terminal's MessagePort to the calling window on TERMINAL_PORT_CHANNEL, tagged with
+ * `attachId` so the page can tell attaches to the same terminal apart.
+ */
+export const AttachTerminalRequest = z.strictObject({ terminalId: Id, attachId: Id });
 
 // Settings the renderer may read and change (V1 doc §20). Each key is one `app_settings` row;
 // main falls back to the default when a row is missing or no longer matches its schema.

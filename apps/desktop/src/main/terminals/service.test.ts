@@ -10,6 +10,7 @@ import {
   attachTerminal,
   createTerminal,
   endActiveSessions,
+  failStaleSessions,
   getTerminal,
   listTerminals,
   recordTerminalExit,
@@ -238,6 +239,23 @@ describe('session lifecycle', () => {
     });
     expect(getTerminal(db, stale.id).status).toBe('running');
     expect(endActiveSessions(db, 'failed')).toEqual([]);
+  });
+
+  it('marks sessions left active by an earlier run as failed at launch', async () => {
+    const { db, deps } = setup();
+    cleanupDb = db;
+    const p = await project(db);
+    const left = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
+    const ended = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
+    recordTerminalExit(db, { sessionId: ended.id, exitCode: 0, signal: null });
+
+    expect(failStaleSessions(db)).toBe(1);
+    expect(getTerminal(db, left.id)).toMatchObject({
+      status: 'failed',
+      endedAt: expect.any(Number),
+    });
+    expect(getTerminal(db, ended.id).status).toBe('exited');
+    expect(failStaleSessions(db)).toBe(0);
   });
 
   it('records a terminal closed by the app as stopped', async () => {

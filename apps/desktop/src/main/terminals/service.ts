@@ -186,3 +186,17 @@ export function endActiveSessions(db: AppDatabase, status: 'stopped' | 'failed')
   activeSessions.clear();
   return ended.flatMap(({ pid }) => (pid === null ? [] : [pid]));
 }
+
+/**
+ * Marks sessions left `starting`/`running` by an earlier run (a crash, or a dev restart) as
+ * `failed`: their PTY host is gone, so they can't be attached. Call at launch, before any
+ * terminal starts. Killing their leftover processes is P2-09. Returns how many were marked.
+ */
+export function failStaleSessions(db: AppDatabase): number {
+  return db
+    .update(terminalSessions)
+    .set({ status: 'failed', endedAt: Date.now() })
+    .where(inArray(terminalSessions.status, ACTIVE))
+    .returning({ id: terminalSessions.id })
+    .all().length;
+}
