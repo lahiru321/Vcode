@@ -1,11 +1,23 @@
 import { basename, extname } from 'node:path';
+import { AdapterError, type AdapterContext, type AgentAdapter } from '@vcode/adapters';
 import { IpcError, type CreateTerminalRequest, type SessionStatus } from '@vcode/shared';
 import { and, eq, inArray } from 'drizzle-orm';
+import { adapterFor, agentConfig, getAgent } from '../agents/service';
+import {
+  agentEndStatus,
+  createAgentSession,
+  failStaleAgentSessions,
+  getAgentSession,
+  setAgentSessionStatus,
+  summarizeAgentSessions,
+  type AgentSessionSummary,
+} from '../agents/sessions';
 import type { AppDatabase } from '../db';
-import { terminalSessions, workspaces } from '../db/schema';
+import { agents, terminalSessions, workspaces } from '../db/schema';
 import { resolveExistingFolder } from '../fs/folders';
+import { createLogger } from '../logging';
 import type { Command, Environment } from '../platform';
-import { getProject } from '../projects/service';
+import { getProject, type ProjectRow } from '../projects/service';
 import { PtyHostError, type PtyHostSupervisor, type TerminalExit } from '../pty-host/supervisor';
 import { ensureMainWorkspace, getWorkspace } from '../workspaces/service';
 
@@ -23,7 +35,11 @@ export interface TerminalDeps {
   resolveShell: (env: Environment) => Promise<{ shell: string; command: Command }>;
   /** Ends a process and everything it started (platform.killProcessTree). */
   killProcessTree: (pid: number) => Promise<void>;
+  /** What agent adapters may use (terminals that run an agent). */
+  adapters: AdapterContext;
 }
+
+const log = createLogger('terminals');
 
 const ACTIVE: SessionStatus[] = ['starting', 'running'];
 
@@ -56,25 +72,37 @@ export async function createTerminal(
   // Checked now rather than left to the spawn, which fails with a less helpful message.
   const cwd = await resolveExistingFolder(workspace.path);
 
-  const env = await deps.environment();
-  const { shell, command } = await deps.resolveShell(env);
+  const baseEnv = await deps.environment();
+  const launch = request.agentId
+    ? await agentLaunch(deps, project, request.agentId, baseEnv, cwd)
+    : { ...(await deps.resolveShell(baseEnv)), env: baseEnv, agent: null };
+  const { shell, command, env, agent } = launch;
 
-  const row = db
-    .insert(terminalSessions)
-    .values({
-      workspaceId: workspace.id,
-      title: request.title ?? shellTitle(shell),
-      shell,
-      cwd,
-      cols: request.cols,
-      rows: request.rows,
-      status: 'starting',
-    })
-    .returning()
-    .get();
+  const row = db.transaction((tx) => {
+    const agentSession = agent ? createAgentSession(tx, agent.id, workspace.id) : null;
+    return tx
+      .insert(terminalSessions)
+      .values({
+        workspaceId: workspace.id,
+        agentSessionId: agentSession?.id ?? null,
+        title: request.title ?? agent?.name ?? shellTitle(shell),
+        shell,
+        cwd,
+        cols: request.cols,
+        rows: request.rows,
+        status: 'starting',
+      })
+      .returning()
+      .get();
+  });
+  const agentSessionId = row.agentSessionId;
+  if (agentSessionId) {
+    setAgentSessionStatus(db, agentSessionId, 'starting');
+  }
 
+  let pid: number;
   try {
-    const { pid } = await deps.host.request('spawn', {
+    ({ pid } = await deps.host.request('spawn', {
       sessionId: row.id,
       file: command.file,
       args: command.verbatimArguments ? command.args.join(' ') : command.args,
@@ -82,28 +110,89 @@ export async function createTerminal(
       env,
       cols: request.cols,
       rows: request.rows,
-    });
-    activeSessions.add(row.id);
-    // Only if no exit arrived in between.
-    return (
-      db
-        .update(terminalSessions)
-        .set({ pid, status: 'running' })
-        .where(and(eq(terminalSessions.id, row.id), eq(terminalSessions.status, 'starting')))
-        .returning()
-        .get() ?? getTerminal(db, row.id)
-    );
+    }));
   } catch (error) {
     db.update(terminalSessions)
       .set({ status: 'failed', endedAt: Date.now() })
       .where(eq(terminalSessions.id, row.id))
       .run();
+    if (agentSessionId) {
+      setAgentSessionStatus(db, agentSessionId, 'failed');
+    }
     const unavailable = error instanceof PtyHostError && error.reason === 'unavailable';
     throw new IpcError(
       unavailable ? 'UNAVAILABLE' : 'INTERNAL',
       `Could not start the terminal: ${errorMessage(error)}`,
     );
   }
+  activeSessions.add(row.id);
+  // Only if no exit arrived in between.
+  const started =
+    db
+      .update(terminalSessions)
+      .set({ pid, status: 'running' })
+      .where(and(eq(terminalSessions.id, row.id), eq(terminalSessions.status, 'starting')))
+      .returning()
+      .get() ?? getTerminal(db, row.id);
+  if (agent && agentSessionId && started.status === 'running') {
+    agent.adapter
+      .start({
+        sessionId: agentSessionId,
+        pid,
+        write: (data) => {
+          deps.host.request('write', { sessionId: row.id, data }).catch((err: unknown) => {
+            log.warn({ err, terminalId: row.id }, 'could not write to the agent');
+          });
+        },
+        killTree: async () => {
+          await stopTerminal(deps, row.id);
+        },
+      })
+      .catch((err: unknown) => log.warn({ err, terminalId: row.id }, 'agent start hook failed'));
+  }
+  return started;
+}
+
+/**
+ * What to run for an agent: the agent must be global or belong to the project. Its adapter
+ * finds the CLI and builds the command (V1 doc §15 steps 4-6).
+ */
+async function agentLaunch(
+  deps: TerminalDeps,
+  project: ProjectRow,
+  agentId: string,
+  baseEnv: Environment,
+  cwd: string,
+): Promise<{
+  shell: string;
+  command: Command;
+  env: Environment;
+  agent: { id: string; name: string; adapter: AgentAdapter };
+}> {
+  const row = getAgent(deps.db, agentId);
+  if (row.projectId !== null && row.projectId !== project.id) {
+    throw new IpcError('NOT_FOUND', 'Agent not found in this project.');
+  }
+  const adapter = adapterFor(row.adapter);
+  const config = agentConfig(row);
+  const env = adapter.prepareEnvironment(config, baseEnv);
+  let launch;
+  try {
+    launch = await adapter.buildCommand(config, deps.adapters, { env, cwd });
+  } catch (error) {
+    if (error instanceof AdapterError && error.reason === 'not_found') {
+      deps.db.update(agents).set({ status: 'not_found' }).where(eq(agents.id, row.id)).run();
+      throw new IpcError('NOT_FOUND', error.message);
+    }
+    throw error;
+  }
+  const command: Command = {
+    file: launch.file,
+    args: launch.args,
+    verbatimArguments: launch.verbatimArguments,
+  };
+  // `shell` is the file actually started: orphan cleanup (./orphans) matches it by name.
+  return { shell: command.file, command, env, agent: { id: row.id, name: row.name, adapter } };
 }
 
 /**
@@ -155,29 +244,42 @@ export async function stopTerminal(
   }
   // The host reports the exit too; whichever comes first records `stopped`.
   activeSessions.delete(terminalId);
-  return (
+  const stopped =
     db
       .update(terminalSessions)
       .set({ status: 'stopped', endedAt: Date.now() })
       .where(and(eq(terminalSessions.id, terminalId), inArray(terminalSessions.status, ACTIVE)))
       .returning()
-      .get() ?? getTerminal(db, terminalId)
-  );
+      .get() ?? getTerminal(db, terminalId);
+  if (stopped.agentSessionId) {
+    setAgentSessionStatus(db, stopped.agentSessionId, 'stopped', stopped.exitCode);
+  }
+  return stopped;
 }
 
-/** Stops the terminal if it is running, then starts a new one with the same folder and title. */
+/**
+ * Stops the terminal if it is running, then starts a new one with the same folder and title,
+ * running the same agent again (a new agent session) if it ran one.
+ */
 export async function restartTerminal(
   deps: TerminalDeps,
   terminalId: string,
 ): Promise<TerminalRow> {
   const terminal = await stopTerminal(deps, terminalId);
   const projectId = workspaceProjectId(deps.db, terminal.workspaceId);
+  const agentSession = terminal.agentSessionId
+    ? getAgentSession(deps.db, terminal.agentSessionId)
+    : undefined;
+  if (terminal.agentSessionId && !agentSession) {
+    throw new IpcError('NOT_FOUND', 'The agent this terminal ran no longer exists.');
+  }
   return createTerminal(deps, {
     projectId,
     workspaceId: terminal.workspaceId,
     cols: terminal.cols,
     rows: terminal.rows,
     title: terminal.title,
+    ...(agentSession ? { agentId: agentSession.agentId } : {}),
   });
 }
 
@@ -210,6 +312,18 @@ export function getTerminal(db: AppDatabase, id: string): TerminalRow {
   return row;
 }
 
+export type TerminalView = TerminalRow & { agent: AgentSessionSummary | null };
+
+/** Terminals as the renderer sees them: with the agent each one runs, if any. */
+export function withAgents(db: AppDatabase, rows: TerminalRow[]): TerminalView[] {
+  const ids = rows.flatMap((row) => (row.agentSessionId ? [row.agentSessionId] : []));
+  const summaries = summarizeAgentSessions(db, ids);
+  return rows.map((row) => ({
+    ...row,
+    agent: (row.agentSessionId && summaries.get(row.agentSessionId)) || null,
+  }));
+}
+
 /** The project's terminals, oldest first. */
 export function listTerminals(db: AppDatabase, projectId: string): TerminalRow[] {
   getProject(db, projectId);
@@ -236,10 +350,20 @@ export function recordTerminalExit(
   if (stopping.delete(exit.sessionId)) {
     status = 'stopped';
   }
-  db.update(terminalSessions)
+  const ended = db
+    .update(terminalSessions)
     .set({ status, exitCode: exit.exitCode, endedAt: Date.now() })
     .where(and(eq(terminalSessions.id, exit.sessionId), inArray(terminalSessions.status, ACTIVE)))
-    .run();
+    .returning({ agentSessionId: terminalSessions.agentSessionId })
+    .get();
+  if (ended?.agentSessionId) {
+    setAgentSessionStatus(
+      db,
+      ended.agentSessionId,
+      agentEndStatus(status, exit.exitCode),
+      exit.exitCode,
+    );
+  }
 }
 
 /**
@@ -260,9 +384,14 @@ export function endActiveSessions(db: AppDatabase, status: 'stopped' | 'failed')
         inArray(terminalSessions.status, ACTIVE),
       ),
     )
-    .returning({ pid: terminalSessions.pid })
+    .returning({ pid: terminalSessions.pid, agentSessionId: terminalSessions.agentSessionId })
     .all();
   activeSessions.clear();
+  for (const { agentSessionId } of ended) {
+    if (agentSessionId) {
+      setAgentSessionStatus(db, agentSessionId, status);
+    }
+  }
   return ended.flatMap(({ pid }) => (pid === null ? [] : [pid]));
 }
 
@@ -275,6 +404,8 @@ export type StaleSession = Pick<TerminalRow, 'id' | 'pid' | 'shell' | 'startedAt
  * terminal starts. Returns them, so their leftover processes can be found (./orphans).
  */
 export function failStaleSessions(db: AppDatabase): StaleSession[] {
+  // Every agent runs in a terminal, so its session is just as dead.
+  failStaleAgentSessions(db);
   return db
     .update(terminalSessions)
     .set({ status: 'failed', endedAt: Date.now() })

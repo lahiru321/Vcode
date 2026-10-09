@@ -1,5 +1,8 @@
 import { app } from 'electron';
+import { adapterContext } from '../agents/run';
+import { agentSessionEvents } from '../agents/sessions';
 import { getDatabase } from '../db';
+import { broadcastEvent } from '../ipc/registry';
 import { createLogger } from '../logging';
 import { platform } from '../platform';
 import { ptyHost } from '../pty-host';
@@ -19,6 +22,7 @@ export {
   listTerminals,
   restartTerminal,
   stopTerminal,
+  withAgents,
 } from './service';
 
 const log = createLogger('terminals');
@@ -40,6 +44,7 @@ export function terminalDeps(): TerminalDeps {
       return { shell, command };
     },
     killProcessTree: (pid) => platform.killProcessTree(pid),
+    adapters: adapterContext,
   };
 }
 
@@ -77,6 +82,7 @@ export function trackTerminalSessions(): void {
       log.warn({ pids, expected }, 'ended terminals left behind by the PTY host');
     }
   });
+  agentSessionEvents.on('status', (update) => broadcastEvent('agent:status', update));
   // Read the user's environment now, so the first terminal doesn't wait for it.
   void loadBaseEnvironment();
 }

@@ -36,6 +36,18 @@ function setup(
     environment: async () => ({ PATH: '/usr/bin' }),
     resolveShell: async () => SHELL,
     killProcessTree: vi.fn(async () => {}),
+    adapters: {
+      platform: {
+        resolveExecutable: async (command) =>
+          command === 'missing' ? null : { path: `/bin/${command}`, kind: 'binary' },
+        buildCommand: (executable, args) => ({
+          file: executable.path,
+          args,
+          verbatimArguments: false,
+        }),
+      },
+      run: async () => ({ exitCode: 0, stdout: '', stderr: '', timedOut: false }),
+    },
   };
   return {
     db,

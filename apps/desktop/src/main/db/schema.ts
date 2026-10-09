@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   AGENT_ADAPTERS,
+  AGENT_SESSION_STATUSES,
   AGENT_STATUSES,
   CREDENTIAL_AUTH_TYPES,
   CREDENTIAL_STATUSES,
@@ -149,7 +150,7 @@ export const agentSessions = sqliteTable(
     workspaceId: text('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    status: text('status', { enum: SESSION_STATUSES }).notNull().default('starting'),
+    status: text('status', { enum: AGENT_SESSION_STATUSES }).notNull().default('created'),
     exitCode: integer('exit_code'),
     startedAt: integer('started_at')
       .notNull()

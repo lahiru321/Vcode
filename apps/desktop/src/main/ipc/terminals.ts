@@ -9,14 +9,25 @@ import {
   restartTerminal,
   stopTerminal,
   terminalDeps,
+  withAgents,
 } from '../terminals';
+import type { TerminalRow } from '../terminals/service';
 import { handle } from './registry';
 
 export function registerTerminalHandlers(): void {
-  handle('terminals:list', ({ projectId }) => listTerminals(getDatabase(), projectId));
-  handle('terminals:create', (request) => createTerminal(terminalDeps(), request));
-  handle('terminals:stop', ({ terminalId }) => stopTerminal(terminalDeps(), terminalId));
-  handle('terminals:restart', ({ terminalId }) => restartTerminal(terminalDeps(), terminalId));
+  const view = (row: TerminalRow) => withAgents(getDatabase(), [row])[0]!;
+  handle('terminals:list', ({ projectId }) =>
+    withAgents(getDatabase(), listTerminals(getDatabase(), projectId)),
+  );
+  handle('terminals:create', async (request) =>
+    view(await createTerminal(terminalDeps(), request)),
+  );
+  handle('terminals:stop', async ({ terminalId }) =>
+    view(await stopTerminal(terminalDeps(), terminalId)),
+  );
+  handle('terminals:restart', async ({ terminalId }) =>
+    view(await restartTerminal(terminalDeps(), terminalId)),
+  );
   handle('terminals:close', ({ terminalId }) => closeTerminal(terminalDeps(), terminalId));
 
   // One end of a new channel goes to the PTY host, the other to the window that asked (and

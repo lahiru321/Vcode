@@ -24,6 +24,32 @@ export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
 export const WORKSPACE_STATUSES = ['ready', 'missing', 'error'] as const;
 export type WorkspaceStatus = (typeof WORKSPACE_STATUSES)[number];
 
-/** Shared by agent sessions and terminal sessions. */
+/** Terminal sessions: the process itself. */
 export const SESSION_STATUSES = ['starting', 'running', 'exited', 'stopped', 'failed'] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
+
+/**
+ * Agent sessions (V1 doc §13): CREATED → STARTING → READY → WORKING ⇄ WAITING → STOPPED /
+ * FAILED / COMPLETED. READY / WORKING / WAITING are best-effort, from terminal activity.
+ * `completed`: the agent exited on its own with code 0.
+ */
+export const AGENT_SESSION_STATUSES = [
+  'created',
+  'starting',
+  'ready',
+  'working',
+  'waiting',
+  'stopped',
+  'failed',
+  'completed',
+] as const;
+export type AgentSessionStatus = (typeof AGENT_SESSION_STATUSES)[number];
+
+/** Agent session statuses while its process may still be running. */
+export const ACTIVE_AGENT_SESSION_STATUSES = [
+  'created',
+  'starting',
+  'ready',
+  'working',
+  'waiting',
+] as const satisfies readonly AgentSessionStatus[];

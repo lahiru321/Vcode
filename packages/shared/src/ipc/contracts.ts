@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { AGENT_ADAPTERS, AGENT_STATUSES, PROJECT_STATUSES, SESSION_STATUSES } from '../domain';
+import {
+  AGENT_ADAPTERS,
+  AGENT_SESSION_STATUSES,
+  AGENT_STATUSES,
+  PROJECT_STATUSES,
+  SESSION_STATUSES,
+} from '../domain';
 import { TERMINAL_COLS, TERMINAL_ROWS } from '../terminal-port';
 import type { EventChannel, InvokeChannel } from './channels';
 
@@ -125,11 +131,30 @@ export type AgentValidation = z.infer<typeof AgentValidation>;
 
 // Terminals (V1 doc §11, §20). A terminal runs in a workspace; without `workspaceId` the
 // project's `main` workspace (its root folder) is used. Terminal data does not go through
-// these channels: each terminal gets its own MessagePort (P2-03).
+// these channels: each terminal gets its own MessagePort (P2-03). A terminal either runs a
+// plain shell or an agent (`agentId` on create; V1 doc §15); `agent` then describes that run.
+
+/** One run of an agent; `status` changes are pushed as `agent:status`. */
+export const TerminalAgent = z.object({
+  sessionId: Id,
+  agentId: Id,
+  name: z.string(),
+  adapter: z.enum(AGENT_ADAPTERS),
+  status: z.enum(AGENT_SESSION_STATUSES),
+});
+export type TerminalAgent = z.infer<typeof TerminalAgent>;
+
+export const AgentStatusEvent = z.object({
+  agentSessionId: Id,
+  agentId: Id,
+  status: z.enum(AGENT_SESSION_STATUSES),
+});
+export type AgentStatusEvent = z.infer<typeof AgentStatusEvent>;
 
 export const TerminalSession = z.object({
   id: Id,
   workspaceId: Id,
+  agent: TerminalAgent.nullable(),
   title: z.string(),
   shell: z.string(),
   cwd: z.string(),
@@ -150,6 +175,8 @@ export const TerminalRows = z.number().int().min(TERMINAL_ROWS.min).max(TERMINAL
 export const CreateTerminalRequest = z.strictObject({
   projectId: Id,
   workspaceId: Id.optional(),
+  /** Runs this agent (global, or one of the project's) instead of a plain shell. */
+  agentId: Id.optional(),
   cols: TerminalCols,
   rows: TerminalRows,
   title: z.string().trim().min(1).max(100).optional(),
@@ -220,6 +247,7 @@ export const invokeContracts = {
 
 export const eventContracts = {
   'app:notice': AppNotice,
+  'agent:status': AgentStatusEvent,
 } satisfies Record<EventChannel, z.ZodType>;
 
 export type InvokeRequest<C extends InvokeChannel> = z.input<
