@@ -108,6 +108,8 @@ export const ListTerminalsRequest = z.strictObject({ projectId: Id });
  */
 export const AttachTerminalRequest = z.strictObject({ terminalId: Id, attachId: Id });
 
+export const TerminalIdRequest = z.strictObject({ terminalId: Id });
+
 // Settings the renderer may read and change (V1 doc §20). Each key is one `app_settings` row;
 // main falls back to the default when a row is missing or no longer matches its schema.
 // Main-only state (e.g. window bounds) lives in the same table but is never exposed here.
@@ -145,6 +147,12 @@ export const invokeContracts = {
     request: AttachTerminalRequest,
     response: z.object({ terminalId: Id }),
   },
+  /** Ends the terminal's whole process tree; the row is returned as `stopped`. */
+  'terminals:stop': { request: TerminalIdRequest, response: TerminalSession },
+  /** Stops the terminal if it is running and starts a new one in its place (a new id). */
+  'terminals:restart': { request: TerminalIdRequest, response: TerminalSession },
+  /** Stops the terminal if it is running; the UI then removes it. */
+  'terminals:close': { request: TerminalIdRequest, response: z.object({ terminalId: Id }) },
   'settings:get': { request: NoPayload, response: Settings },
   'settings:set': { request: SetSettingsRequest, response: Settings },
   'dialog:pickFolder': { request: NoPayload, response: PickFolderResponse },

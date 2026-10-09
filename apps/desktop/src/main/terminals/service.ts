@@ -21,12 +21,16 @@ export interface TerminalDeps {
   environment: () => Promise<Environment>;
   /** The shell to run and how to start it. */
   resolveShell: (env: Environment) => Promise<{ shell: string; command: Command }>;
+  /** Ends a process and everything it started (platform.killProcessTree). */
+  killProcessTree: (pid: number) => Promise<void>;
 }
 
 const ACTIVE: SessionStatus[] = ['starting', 'running'];
 
 /** Sessions started by this run of the app; rows left over from a crash are P2-09's job. */
 const activeSessions = new Set<string>();
+/** Sessions being stopped by the user: their exit is recorded as `stopped`. */
+const stopping = new Set<string>();
 
 /** "C:\…\pwsh.exe" → "pwsh", "/bin/zsh" → "zsh". */
 function shellTitle(shell: string): string {
@@ -126,6 +130,78 @@ export async function attachTerminal(
   }
 }
 
+/**
+ * Stops a terminal by ending its whole process tree (V1 doc §11), leaving other terminals alone.
+ * Returns the row, now `stopped`; a terminal that has already ended is returned as it is.
+ */
+export async function stopTerminal(
+  deps: Pick<TerminalDeps, 'db' | 'killProcessTree'>,
+  terminalId: string,
+): Promise<TerminalRow> {
+  const { db } = deps;
+  const terminal = getTerminal(db, terminalId);
+  if (!ACTIVE.includes(terminal.status)) {
+    return terminal;
+  }
+  if (terminal.pid === null) {
+    throw new IpcError('CONFLICT', 'The terminal is still starting. Try again in a moment.');
+  }
+  stopping.add(terminalId);
+  try {
+    await deps.killProcessTree(terminal.pid);
+  } catch (error) {
+    stopping.delete(terminalId);
+    throw new IpcError('INTERNAL', `Could not stop the terminal: ${errorMessage(error)}`);
+  }
+  // The host reports the exit too; whichever comes first records `stopped`.
+  activeSessions.delete(terminalId);
+  return (
+    db
+      .update(terminalSessions)
+      .set({ status: 'stopped', endedAt: Date.now() })
+      .where(and(eq(terminalSessions.id, terminalId), inArray(terminalSessions.status, ACTIVE)))
+      .returning()
+      .get() ?? getTerminal(db, terminalId)
+  );
+}
+
+/** Stops the terminal if it is running, then starts a new one with the same folder and title. */
+export async function restartTerminal(
+  deps: TerminalDeps,
+  terminalId: string,
+): Promise<TerminalRow> {
+  const terminal = await stopTerminal(deps, terminalId);
+  const projectId = workspaceProjectId(deps.db, terminal.workspaceId);
+  return createTerminal(deps, {
+    projectId,
+    workspaceId: terminal.workspaceId,
+    cols: terminal.cols,
+    rows: terminal.rows,
+    title: terminal.title,
+  });
+}
+
+/** Stops the terminal if it is running. The row stays as history; the UI drops the tab. */
+export async function closeTerminal(
+  deps: Pick<TerminalDeps, 'db' | 'killProcessTree'>,
+  terminalId: string,
+): Promise<{ terminalId: string }> {
+  await stopTerminal(deps, terminalId);
+  return { terminalId };
+}
+
+function workspaceProjectId(db: AppDatabase, workspaceId: string): string {
+  const workspace = db
+    .select({ projectId: workspaces.projectId })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .get();
+  if (!workspace) {
+    throw new IpcError('NOT_FOUND', 'Workspace not found. It may have been deleted.');
+  }
+  return workspace.projectId;
+}
+
 export function getTerminal(db: AppDatabase, id: string): TerminalRow {
   const row = db.select().from(terminalSessions).where(eq(terminalSessions.id, id)).get();
   if (!row) {
@@ -149,7 +225,7 @@ export function listTerminals(db: AppDatabase, projectId: string): TerminalRow[]
 
 /**
  * Records a terminal whose process ended: `exited` on its own, `stopped` when the app closed it
- * (e.g. the PTY host closing every terminal on quit).
+ * (the user stopped it, or the PTY host closed every terminal on quit).
  */
 export function recordTerminalExit(
   db: AppDatabase,
@@ -157,6 +233,9 @@ export function recordTerminalExit(
   status: 'exited' | 'stopped' = 'exited',
 ): void {
   activeSessions.delete(exit.sessionId);
+  if (stopping.delete(exit.sessionId)) {
+    status = 'stopped';
+  }
   db.update(terminalSessions)
     .set({ status, exitCode: exit.exitCode, endedAt: Date.now() })
     .where(and(eq(terminalSessions.id, exit.sessionId), inArray(terminalSessions.status, ACTIVE)))
@@ -187,16 +266,24 @@ export function endActiveSessions(db: AppDatabase, status: 'stopped' | 'failed')
   return ended.flatMap(({ pid }) => (pid === null ? [] : [pid]));
 }
 
+/** A session left `starting`/`running` by an earlier run, as recorded. */
+export type StaleSession = Pick<TerminalRow, 'id' | 'pid' | 'shell' | 'startedAt'>;
+
 /**
  * Marks sessions left `starting`/`running` by an earlier run (a crash, or a dev restart) as
  * `failed`: their PTY host is gone, so they can't be attached. Call at launch, before any
- * terminal starts. Killing their leftover processes is P2-09. Returns how many were marked.
+ * terminal starts. Returns them, so their leftover processes can be found (./orphans).
  */
-export function failStaleSessions(db: AppDatabase): number {
+export function failStaleSessions(db: AppDatabase): StaleSession[] {
   return db
     .update(terminalSessions)
     .set({ status: 'failed', endedAt: Date.now() })
     .where(inArray(terminalSessions.status, ACTIVE))
-    .returning({ id: terminalSessions.id })
-    .all().length;
+    .returning({
+      id: terminalSessions.id,
+      pid: terminalSessions.pid,
+      shell: terminalSessions.shell,
+      startedAt: terminalSessions.startedAt,
+    })
+    .all();
 }

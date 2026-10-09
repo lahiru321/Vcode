@@ -1,12 +1,14 @@
 import { defineConfig } from 'vitest/config';
 
 // Unit tests for the main process and shared code, run in plain Node (not Electron).
-// Modules that import `electron` are tested with `vi.mock('electron')`.
+// Modules that import `electron` are tested with `vi.mock('electron')`. Renderer tests are
+// limited to DOM-free logic (e.g. terminal rules, checked against @xterm/headless).
 export default defineConfig({
   test: {
     include: [
       'apps/desktop/src/main/**/*.test.ts',
       'apps/desktop/src/pty-host/**/*.test.ts',
+      'apps/desktop/src/renderer/**/*.test.ts',
       'packages/*/src/**/*.test.ts',
     ],
     environment: 'node',

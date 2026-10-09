@@ -6,6 +6,7 @@ import {
 } from '@vcode/shared';
 import { openTerminalPort } from '@renderer/lib/terminal-port';
 import { cn } from '@renderer/lib/utils';
+import { blockClipboardSequences, confirmedLinkHandler } from './safety';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -42,6 +43,11 @@ const THEME: ITheme = {
   brightWhite: '#ffffff',
 };
 
+/** main asks before opening http(s) links in the browser and refuses anything else (security.ts). */
+function openLink(uri: string): void {
+  window.open(uri);
+}
+
 const FONT_FAMILY =
   "'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, 'DejaVu Sans Mono', monospace";
 
@@ -74,13 +80,13 @@ export function TerminalView({ terminalId, active, onExit }: TerminalViewProps) 
       cursorBlink: true,
       scrollback: TERMINAL_SCROLLBACK,
       theme: THEME,
+      linkHandler: confirmedLinkHandler(openLink),
     });
+    blockClipboardSequences(terminal);
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new SearchAddon());
-    // window.open goes to main, which asks before opening http(s) links in the browser
-    // (security.ts) and refuses anything else.
-    terminal.loadAddon(new WebLinksAddon((_event, uri) => window.open(uri)));
+    terminal.loadAddon(new WebLinksAddon((_event, uri) => openLink(uri)));
     terminal.open(container);
     try {
       const webgl = new WebglAddon();

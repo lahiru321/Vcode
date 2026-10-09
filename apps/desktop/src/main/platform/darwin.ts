@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process';
 import { access, constants, stat } from 'node:fs/promises';
-import { isAbsolute, join, normalize } from 'node:path';
+import { basename, isAbsolute, join, normalize } from 'node:path';
 import { userInfo } from 'node:os';
 import { shell } from 'electron';
-import { assertPid, toEnvironment } from './common';
-import type { Command, Environment, Executable, Platform } from './types';
+import { assertPid, run, toEnvironment } from './common';
+import type { Command, Environment, Executable, Platform, ProcessInfo } from './types';
 
 // macOS support ships after V1 (ROADMAP "macOS Release"). This module is complete enough to
 // load and to unit-test on macOS CI, but has not been run against a real macOS desktop yet.
@@ -95,6 +95,45 @@ async function killProcessTree(pid: number): Promise<void> {
   }
 }
 
+// "  123 Thu Oct  9 16:00:00 2026 /bin/zsh" (`lstart` in the C locale).
+const PS_LINE = /^\s*(\d+)\s+(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(.+)$/;
+
+/** Parses `ps -o pid=,lstart=,comm=` output. Exported for tests. */
+export function parsePsOutput(output: string): Map<number, ProcessInfo> {
+  const result = new Map<number, ProcessInfo>();
+  for (const line of output.split('\n')) {
+    const match = PS_LINE.exec(line);
+    if (!match) {
+      continue;
+    }
+    const startedAt = Date.parse(match[2]!.replace(/\s+/g, ' '));
+    if (Number.isNaN(startedAt)) {
+      continue;
+    }
+    // A login shell's name starts with "-" ("-zsh").
+    const name = basename(match[3]!.trim()).replace(/^-/, '');
+    result.set(Number(match[1]), { name, startedAt });
+  }
+  return result;
+}
+
+async function processInfo(pids: number[]): Promise<Map<number, ProcessInfo>> {
+  pids.forEach(assertPid);
+  if (pids.length === 0) {
+    return new Map();
+  }
+  const { code, stdout, stderr } = await run(
+    '/bin/ps',
+    ['-o', 'pid=,lstart=,comm=', '-p', pids.join(',')],
+    { timeoutMs: 10_000, env: { ...toEnvironment(process.env), LC_ALL: 'C' } },
+  );
+  // ps exits 1 when none of the PIDs exist.
+  if (code !== 0 && code !== 1) {
+    throw new Error(`ps failed (exit ${code}): ${stderr.trim()}`);
+  }
+  return parsePsOutput(stdout);
+}
+
 /** Runs the login shell once and reads its environment (`env -0`, after a marker to skip any banner). */
 async function loadUserEnvironment(): Promise<Environment> {
   const base = toEnvironment(process.env);
@@ -145,6 +184,7 @@ export const darwin: Platform = {
   resolveExecutable,
   buildCommand,
   killProcessTree,
+  processInfo,
   loadUserEnvironment,
   revealInFileManager: (path) => shell.showItemInFolder(path),
 };

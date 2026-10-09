@@ -25,6 +25,13 @@ export interface Command {
   verbatimArguments: boolean;
 }
 
+export interface ProcessInfo {
+  /** File name of the executable, e.g. "pwsh.exe" or "zsh". */
+  name: string;
+  /** When the process started, in Unix epoch milliseconds (macOS: whole seconds). */
+  startedAt: number;
+}
+
 /** All OS-specific behaviour. Spec: V1 doc §6 (Cross-Platform Readiness). */
 export interface Platform {
   readonly name: 'win32' | 'darwin';
@@ -46,6 +53,12 @@ export interface Platform {
 
   /** Ends `pid` and every process it started. Resolves once done; a missing process is not an error. */
   killProcessTree(pid: number): Promise<void>;
+
+  /**
+   * Name and start time of the given processes, for telling a leftover process from an
+   * unrelated one that reuses its PID. Processes that don't exist are left out.
+   */
+  processInfo(pids: number[]): Promise<Map<number, ProcessInfo>>;
 
   /**
    * The environment a fresh terminal would get: on Windows the current user + system variables

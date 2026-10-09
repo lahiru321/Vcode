@@ -3,7 +3,7 @@ import { chmodSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { tempDir } from '../testing';
-import { darwin } from './darwin';
+import { darwin, parsePsOutput } from './darwin';
 import { platform } from '.';
 
 vi.mock('electron', () => ({ shell: {} }));
@@ -71,6 +71,29 @@ describe('platform (current OS)', () => {
     }
   });
 
+  it('processInfo reports name and start time, leaving out processes that are gone', async () => {
+    const before = Date.now();
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    const gone = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
+    await new Promise((resolve) => gone.once('exit', resolve));
+    try {
+      const info = await platform.processInfo([child.pid!, gone.pid!]);
+      expect([...info.keys()]).toEqual([child.pid]);
+      const { name, startedAt } = info.get(child.pid!)!;
+      expect(name.toLowerCase()).toMatch(/^node(\.exe)?$/);
+      // macOS reports whole seconds.
+      expect(startedAt).toBeGreaterThanOrEqual(before - 1000);
+      expect(startedAt).toBeLessThanOrEqual(Date.now());
+    } finally {
+      child.kill();
+    }
+    await expect(platform.processInfo([])).resolves.toEqual(new Map());
+    await expect(platform.processInfo([0])).rejects.toThrow(/Invalid process id/);
+  });
+
   it('finds this Node.js by absolute path', async () => {
     await expect(platform.resolveExecutable(process.execPath, { PATH: '' })).resolves.toMatchObject(
       { kind: 'binary' },
@@ -91,6 +114,25 @@ describe('platform (current OS)', () => {
       >,
     );
     expect(shell).toMatch(platform.name === 'win32' ? /^[A-Za-z]:\\/ : /^\//);
+  });
+});
+
+describe('parsePsOutput', () => {
+  it('reads PID, start time and name; strips the login-shell dash', () => {
+    const info = parsePsOutput(
+      [
+        '  412 Thu Oct  9 16:00:05 2026 -zsh',
+        '98765 Fri Oct 10 09:30:00 2026 /usr/local/bin/node',
+        'garbage',
+        '',
+      ].join('\n'),
+    );
+    expect(info).toEqual(
+      new Map([
+        [412, { name: 'zsh', startedAt: new Date(2026, 9, 9, 16, 0, 5).getTime() }],
+        [98765, { name: 'node', startedAt: new Date(2026, 9, 10, 9, 30, 0).getTime() }],
+      ]),
+    );
   });
 });
 

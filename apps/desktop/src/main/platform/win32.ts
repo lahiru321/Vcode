@@ -2,7 +2,14 @@ import { lstat, stat } from 'node:fs/promises';
 import { extname, isAbsolute, join, normalize } from 'node:path';
 import { shell } from 'electron';
 import { assertPid, run, toEnvironment } from './common';
-import type { Command, Environment, Executable, ExecutableKind, Platform } from './types';
+import type {
+  Command,
+  Environment,
+  Executable,
+  ExecutableKind,
+  Platform,
+  ProcessInfo,
+} from './types';
 
 const RUNNABLE_EXTENSIONS: Record<string, ExecutableKind> = {
   '.com': 'binary',
@@ -170,6 +177,39 @@ async function killProcessTree(pid: number): Promise<void> {
   }
 }
 
+/** One CIM query for all PIDs; `-InputObject` keeps a single result an array. */
+function processInfoScript(pids: number[]): string {
+  const filter = pids.map((pid) => `ProcessId=${pid}`).join(' OR ');
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+    `$found = @(Get-CimInstance Win32_Process -Filter '${filter}' | ForEach-Object { @{ pid = [int]$_.ProcessId; name = [string]$_.Name; startedAt = ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } })`,
+    'ConvertTo-Json -InputObject $found -Compress',
+  ].join('; ');
+}
+
+async function processInfo(pids: number[]): Promise<Map<number, ProcessInfo>> {
+  pids.forEach(assertPid); // they end up in the script
+  const result = new Map<number, ProcessInfo>();
+  if (pids.length === 0) {
+    return result;
+  }
+  const env = toEnvironment(process.env);
+  const { code, stdout, stderr } = await run(
+    windowsPowerShell(env),
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', processInfoScript(pids)],
+    { timeoutMs: 15_000 },
+  );
+  if (code !== 0) {
+    throw new Error(`Reading process information failed (exit ${code}): ${stderr.trim()}`);
+  }
+  const found = JSON.parse(stdout) as { pid: number; name: string; startedAt: number }[];
+  for (const { pid, name, startedAt } of found) {
+    result.set(pid, { name, startedAt });
+  }
+  return result;
+}
+
 // [Environment]::GetEnvironmentVariables expands REG_EXPAND_SZ values. Output is forced to
 // UTF-8 so non-ASCII user names and paths survive.
 const READ_ENVIRONMENT_SCRIPT = [
@@ -231,6 +271,7 @@ export const win32: Platform = {
   resolveExecutable,
   buildCommand,
   killProcessTree,
+  processInfo,
   loadUserEnvironment,
   revealInFileManager: (path) => shell.showItemInFolder(path),
 };

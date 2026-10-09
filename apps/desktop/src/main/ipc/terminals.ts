@@ -1,12 +1,23 @@
 import { TERMINAL_PORT_CHANNEL } from '@vcode/shared';
 import { MessageChannelMain } from 'electron';
 import { getDatabase } from '../db';
-import { attachTerminal, createTerminal, listTerminals, terminalDeps } from '../terminals';
+import {
+  attachTerminal,
+  closeTerminal,
+  createTerminal,
+  listTerminals,
+  restartTerminal,
+  stopTerminal,
+  terminalDeps,
+} from '../terminals';
 import { handle } from './registry';
 
 export function registerTerminalHandlers(): void {
   handle('terminals:list', ({ projectId }) => listTerminals(getDatabase(), projectId));
   handle('terminals:create', (request) => createTerminal(terminalDeps(), request));
+  handle('terminals:stop', ({ terminalId }) => stopTerminal(terminalDeps(), terminalId));
+  handle('terminals:restart', ({ terminalId }) => restartTerminal(terminalDeps(), terminalId));
+  handle('terminals:close', ({ terminalId }) => closeTerminal(terminalDeps(), terminalId));
 
   // One end of a new channel goes to the PTY host, the other to the window that asked (and
   // only to it): terminal data then flows between them without passing through main.

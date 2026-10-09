@@ -2,7 +2,14 @@ import { darwin } from './darwin';
 import type { Platform } from './types';
 import { win32 } from './win32';
 
-export type { Command, Environment, Executable, ExecutableKind, Platform } from './types';
+export type {
+  Command,
+  Environment,
+  Executable,
+  ExecutableKind,
+  Platform,
+  ProcessInfo,
+} from './types';
 export { toEnvironment } from './common';
 
 // The one place that branches on the OS. ESLint bans process.platform everywhere else.

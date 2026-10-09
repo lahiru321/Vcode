@@ -8,12 +8,15 @@ import { PtyHostError } from '../pty-host/supervisor';
 import { tempDir, testDatabase } from '../testing';
 import {
   attachTerminal,
+  closeTerminal,
   createTerminal,
   endActiveSessions,
   failStaleSessions,
   getTerminal,
   listTerminals,
   recordTerminalExit,
+  restartTerminal,
+  stopTerminal,
   type TerminalDeps,
 } from './service';
 
@@ -32,8 +35,14 @@ function setup(
     host: { request: hostRequest },
     environment: async () => ({ PATH: '/usr/bin' }),
     resolveShell: async () => SHELL,
+    killProcessTree: vi.fn(async () => {}),
   };
-  return { db, deps, request: hostRequest as ReturnType<typeof vi.fn> };
+  return {
+    db,
+    deps,
+    request: hostRequest as ReturnType<typeof vi.fn>,
+    killProcessTree: deps.killProcessTree as ReturnType<typeof vi.fn>,
+  };
 }
 
 async function project(db: TerminalDeps['db'], name = 'app') {
@@ -249,13 +258,15 @@ describe('session lifecycle', () => {
     const ended = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
     recordTerminalExit(db, { sessionId: ended.id, exitCode: 0, signal: null });
 
-    expect(failStaleSessions(db)).toBe(1);
+    expect(failStaleSessions(db)).toEqual([
+      { id: left.id, pid: 999, shell: '/bin/zsh', startedAt: left.startedAt },
+    ]);
     expect(getTerminal(db, left.id)).toMatchObject({
       status: 'failed',
       endedAt: expect.any(Number),
     });
     expect(getTerminal(db, ended.id).status).toBe('exited');
-    expect(failStaleSessions(db)).toBe(0);
+    expect(failStaleSessions(db)).toEqual([]);
   });
 
   it('records a terminal closed by the app as stopped', async () => {
@@ -266,6 +277,100 @@ describe('session lifecycle', () => {
     recordTerminalExit(db, { sessionId: t.id, exitCode: 0, signal: null }, 'stopped');
     expect(getTerminal(db, t.id)).toMatchObject({ status: 'stopped', exitCode: 0 });
     expect(endActiveSessions(db, 'stopped')).toEqual([]); // nothing left to kill
+  });
+});
+
+describe('stopTerminal / restartTerminal / closeTerminal', () => {
+  async function running() {
+    const { db, deps, request, killProcessTree } = setup();
+    cleanupDb = db;
+    const p = await project(db);
+    const t = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
+    return { db, deps, request, killProcessTree, p, t };
+  }
+
+  it('stops a terminal by ending its process tree, and keeps it stopped when the exit arrives', async () => {
+    const { db, deps, killProcessTree, t } = await running();
+    const stopped = await stopTerminal(deps, t.id);
+    expect(killProcessTree).toHaveBeenCalledExactlyOnceWith(999);
+    expect(stopped).toMatchObject({ id: t.id, status: 'stopped', endedAt: expect.any(Number) });
+    recordTerminalExit(db, { sessionId: t.id, exitCode: 1, signal: null });
+    expect(getTerminal(db, t.id).status).toBe('stopped');
+    expect(endActiveSessions(db, 'failed')).toEqual([]); // no longer this run's to clean up
+  });
+
+  it('records `stopped` when the exit arrives while the tree is being killed', async () => {
+    const { db, deps, killProcessTree, t } = await running();
+    killProcessTree.mockImplementationOnce(async () => {
+      recordTerminalExit(db, { sessionId: t.id, exitCode: 1, signal: null });
+    });
+    const stopped = await stopTerminal(deps, t.id);
+    expect(stopped).toMatchObject({ status: 'stopped', exitCode: 1 });
+  });
+
+  it('leaves a terminal that already ended alone', async () => {
+    const { db, deps, killProcessTree, t } = await running();
+    recordTerminalExit(db, { sessionId: t.id, exitCode: 0, signal: null });
+    await expect(stopTerminal(deps, t.id)).resolves.toMatchObject({ status: 'exited' });
+    expect(killProcessTree).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed kill and leaves the terminal running', async () => {
+    const { db, deps, killProcessTree, t } = await running();
+    killProcessTree.mockRejectedValueOnce(new Error('access denied'));
+    await expect(stopTerminal(deps, t.id)).rejects.toMatchObject({
+      code: 'INTERNAL',
+      message: expect.stringContaining('access denied'),
+    });
+    expect(getTerminal(db, t.id).status).toBe('running');
+    recordTerminalExit(db, { sessionId: t.id, exitCode: 0, signal: null });
+    expect(getTerminal(db, t.id).status).toBe('exited'); // not mistaken for a stop
+  });
+
+  it('refuses to stop a terminal that is still starting', async () => {
+    const { db, deps, t } = await running();
+    db.update(terminalSessions)
+      .set({ status: 'starting', pid: null })
+      .where(eq(terminalSessions.id, t.id))
+      .run();
+    await expect(stopTerminal(deps, t.id)).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('restarts a terminal as a new one in the same place', async () => {
+    const { db, deps, request, killProcessTree, t } = await running();
+    const restarted = await restartTerminal(deps, t.id);
+    expect(killProcessTree).toHaveBeenCalledWith(999);
+    expect(getTerminal(db, t.id).status).toBe('stopped');
+    expect(restarted.id).not.toBe(t.id);
+    expect(restarted).toMatchObject({
+      workspaceId: t.workspaceId,
+      cwd: t.cwd,
+      title: t.title,
+      status: 'running',
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('restarts a terminal that has already ended without killing anything', async () => {
+    const { db, deps, killProcessTree, t } = await running();
+    recordTerminalExit(db, { sessionId: t.id, exitCode: 0, signal: null });
+    const restarted = await restartTerminal(deps, t.id);
+    expect(killProcessTree).not.toHaveBeenCalled();
+    expect(restarted.status).toBe('running');
+  });
+
+  it('closes a terminal by stopping it', async () => {
+    const { db, deps, killProcessTree, t } = await running();
+    await expect(closeTerminal(deps, t.id)).resolves.toEqual({ terminalId: t.id });
+    expect(killProcessTree).toHaveBeenCalledWith(999);
+    expect(getTerminal(db, t.id).status).toBe('stopped');
+  });
+
+  it('refuses an unknown terminal', async () => {
+    const { deps } = await running();
+    await expect(stopTerminal(deps, MISSING_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(restartTerminal(deps, MISSING_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(closeTerminal(deps, MISSING_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 

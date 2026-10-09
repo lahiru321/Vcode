@@ -4,6 +4,7 @@ import { createLogger } from '../logging';
 import { platform } from '../platform';
 import { ptyHost } from '../pty-host';
 import { loadBaseEnvironment, prepareTerminalEnvironment } from './environment';
+import { killLeftovers } from './orphans';
 import {
   endActiveSessions,
   failStaleSessions,
@@ -11,7 +12,14 @@ import {
   type TerminalDeps,
 } from './service';
 
-export { attachTerminal, createTerminal, listTerminals } from './service';
+export {
+  attachTerminal,
+  closeTerminal,
+  createTerminal,
+  listTerminals,
+  restartTerminal,
+  stopTerminal,
+} from './service';
 
 const log = createLogger('terminals');
 
@@ -31,14 +39,27 @@ export function terminalDeps(): TerminalDeps {
       );
       return { shell, command };
     },
+    killProcessTree: (pid) => platform.killProcessTree(pid),
   };
 }
 
 /** Keeps terminal_sessions in step with the PTY host. Call before `ptyHost.start()`. */
 export function trackTerminalSessions(): void {
+  // Sessions an earlier run left "running" (it crashed): mark them now, before the UI lists
+  // terminals, then end any of their processes that are still around (V1 doc §11).
   const stale = failStaleSessions(getDatabase());
-  if (stale > 0) {
-    log.warn({ count: stale }, 'marked terminals from an earlier run as failed');
+  if (stale.length > 0) {
+    log.warn({ count: stale.length }, 'marked terminals from an earlier run as failed');
+    killLeftovers(stale, platform, (err, pid) => {
+      log.warn({ err, pid }, 'could not end a process left behind by an earlier run');
+    }).then(
+      (pids) => {
+        if (pids.length > 0) {
+          log.warn({ pids }, 'ended processes left behind by an earlier run');
+        }
+      },
+      (err: unknown) => log.warn({ err }, 'could not check for processes left behind'),
+    );
   }
   ptyHost.on('terminalExit', (exit) =>
     // While the host shuts down, it is the one closing the terminals.

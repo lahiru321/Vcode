@@ -108,6 +108,9 @@ function TerminalsArea({ terminals }: { terminals: ProjectTerminals }) {
         activeId={terminals.activeId}
         onActivate={terminals.activate}
         onCreate={() => void terminals.create()}
+        onStop={(id) => void terminals.stop(id)}
+        onRestart={(id) => void terminals.restart(id)}
+        onClose={(id) => void terminals.close(id)}
       />
       <div className="relative min-h-0 flex-1 bg-[#0a0a0a]">
         {terminals.terminals.map((terminal) => (
