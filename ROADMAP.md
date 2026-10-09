@@ -34,8 +34,8 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P3 — First CLI Agent
 
 **Next up:**
-1. `P3-03` Agents service + IPC (minimal create / list)
-2. `P3-04` + `P3-05` Agents launch in the `main` workspace; `agent_sessions` lifecycle
+1. `P3-04` Agents launch in the project's `main` workspace
+2. `P3-05` `agent_sessions` lifecycle + status
 3. `P3-06` + `P3-07` Status detection; "Start Claude Code" button
 
 ---
@@ -161,7 +161,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-09:* `packages/adapters/src/types.ts`. The package has no Node/Electron imports: main passes an `AdapterContext` = the platform layer's `resolveExecutable` / `buildCommand` (same shapes, declared again) + `run` (runs a command to completion, never throws; `src/main/agents/run.ts`, `execFile` with `windowsVerbatimArguments` and a timeout). Processes stay with main and the PTY host, so the process hooks are narrow: `start(session)` after the spawn, `stop(session)` (default: `session.killTree()`), `cleanup(session)` after it ended, and `getStatus(current, signal)` maps terminal signals (`output` / `idle` / `bell`) to `ready` / `working` / `waiting` (used by P3-06). `CliAdapter` base class: executable = the configured one or `defaultExecutable` on PATH; validate = `--version` (15 s) → `ready` + parsed version / `not_found` / `error` with the first output line; `buildCommand` = `launchArgs(config)` + the user's args, throws `AdapterError('not_found')`; default activity rules (start-up output ignored, first idle → `ready`, output → `working`, idle/bell after work → `waiting`). `getAdapter(id)` registry.
 - [x] **P3-02** · `ClaudeAdapter`: find the executable (`.exe` / `.cmd` shim via `resolveExecutable`), validate with `--version`, build the command · `M`
   - *2026-10-09:* `packages/adapters/src/claude.ts`: `claude` on PATH; `model` → `--model`, role + instructions → `--append-system-prompt`; drops `CLAUDECODE` / `CLAUDE_CODE_ENTRYPOINT` from the environment (a Claude started from inside Claude Code would think it's nested). No credentials: Claude Code's own login. Tests: unit (fake context) + real platform layer through an npm-style `.cmd` shim / `sh` script. Checked on this machine: the native install `~\.local\bin\claude.exe` resolves and validates as 2.1.294.
-- [ ] **P3-03** · Agents service + IPC (minimal create / list) · `S`
+- [x] **P3-03** · Agents service + IPC (minimal create / list) · `S`
+  - *2026-10-09:* `src/main/agents/service.ts` + `ipc/agents.ts`: `agents:list { projectId? }` (global agents + that project's own, by name), `agents:create` (provider must have an adapter — only `claude` for now, others `INVALID_REQUEST`; executable defaults to the adapter's CLI; blank model/role/instructions → null; env names must be valid variable names), and `agents:validate { id }` (runs the adapter's check with the terminal environment, stores `ready` / `not_found` / `error` as the agent's status, returns the version or the message). The `Agent` contract maps `args_json` / `env_json` to `args` / `env` and leaves out `credentialId` until P4. Update / delete come with the agents manager (P4-02).
 - [ ] **P3-04** · Default `main` workspace created with each project; agents launch there · `S`
   - *2026-10-03:* The `main` workspace (kind `main`, path = project root, name `main`) is already created on first use by P2-02 (`ensureMainWorkspace`, `src/main/workspaces/service.ts`). Left for P3-04: agents launching there.
 - [ ] **P3-05** · `agent_sessions` lifecycle + status (`CREATED → STARTING → READY → … → STOPPED / FAILED`) · `M`

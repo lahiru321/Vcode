@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PROJECT_STATUSES, SESSION_STATUSES } from '../domain';
+import { AGENT_ADAPTERS, AGENT_STATUSES, PROJECT_STATUSES, SESSION_STATUSES } from '../domain';
 import { TERMINAL_COLS, TERMINAL_ROWS } from '../terminal-port';
 import type { EventChannel, InvokeChannel } from './channels';
 
@@ -66,6 +66,62 @@ export const UpdateProjectRequest = z
     message: 'Nothing to update',
   });
 export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequest>;
+
+// Agents (V1 doc §12, §14, §20): a configured CLI, global (`projectId: null`) or for one project.
+// `env` holds plain variables only; secrets are credentials (P4) and never come back here.
+
+const AgentName = z.string().trim().min(1, 'Name is required').max(100, 'Name is too long');
+const EnvName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Not a valid variable name');
+
+export const Agent = z.object({
+  id: Id,
+  projectId: Id.nullable(),
+  name: z.string(),
+  adapter: z.enum(AGENT_ADAPTERS),
+  executable: z.string(),
+  args: z.array(z.string()),
+  env: z.record(z.string(), z.string()),
+  model: z.string().nullable(),
+  role: z.string().nullable(),
+  instructions: z.string().nullable(),
+  status: z.enum(AGENT_STATUSES),
+  createdAt: Timestamp,
+  updatedAt: Timestamp,
+});
+export type Agent = z.infer<typeof Agent>;
+
+const OptionalText = (max: number) => z.string().trim().max(max).nullable().optional();
+
+export const CreateAgentRequest = z.strictObject({
+  /** null or left out = a global agent. */
+  projectId: Id.nullable().optional(),
+  name: AgentName,
+  adapter: z.enum(AGENT_ADAPTERS),
+  /** Command name or absolute path; defaults to the adapter's CLI (e.g. "claude"). */
+  executable: z.string().trim().max(4096).optional(),
+  args: z.array(z.string().max(4096)).max(100).optional(),
+  env: z
+    .record(EnvName, z.string().max(32_768))
+    .refine((env) => Object.keys(env).length <= 100, 'Too many variables')
+    .optional(),
+  model: OptionalText(200),
+  role: OptionalText(200),
+  instructions: OptionalText(20_000),
+});
+export type CreateAgentRequest = z.infer<typeof CreateAgentRequest>;
+
+/** Global agents plus, with `projectId`, that project's own. */
+export const ListAgentsRequest = z.strictObject({ projectId: Id.optional() });
+
+export const AgentIdRequest = z.strictObject({ id: Id });
+
+/** The agent with its new `status`; `version` when it was found and ran. */
+export const AgentValidation = z.object({
+  agent: Agent,
+  version: z.string().nullable(),
+  message: z.string().nullable(),
+});
+export type AgentValidation = z.infer<typeof AgentValidation>;
 
 // Terminals (V1 doc §11, §20). A terminal runs in a workspace; without `workspaceId` the
 // project's `main` workspace (its root folder) is used. Terminal data does not go through
@@ -141,6 +197,10 @@ export const invokeContracts = {
   'projects:create': { request: CreateProjectRequest, response: Project },
   'projects:update': { request: UpdateProjectRequest, response: Project },
   'projects:delete': { request: ProjectIdRequest, response: z.object({ id: Id }) },
+  'agents:list': { request: ListAgentsRequest, response: z.array(Agent) },
+  'agents:create': { request: CreateAgentRequest, response: Agent },
+  /** Runs the CLI's version check and records the result as the agent's status. */
+  'agents:validate': { request: AgentIdRequest, response: AgentValidation },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
   'terminals:attach': {
