@@ -31,12 +31,12 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P4 — Agent Registry
+**Current phase:** P5 — Multi-Terminal Workspace
 
 **Next up:**
-1. Owner: check P4's Done-when with the real Gemini CLI and Codex CLI (not installed on the dev machine), then mark P4 done
-2. `P5-01` dockview grid for terminal panels
-3. `P5-02` Add Terminal dialog: project → workspace → agent or plain shell
+1. `P5-01` dockview grid for terminal panels
+2. `P5-02` Add Terminal dialog: project → workspace → agent or plain shell
+3. `P5-03` Panel controls: close, maximize / restore, rename, rearrange, split
 
 ---
 
@@ -47,7 +47,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P1 | Foundation | App opens, projects persist, CI green on Windows + macOS | L | Done |
 | P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | Done |
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
-| P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Built; owner check |
+| P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | To do |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | To do |
 | P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | To do |
@@ -207,7 +207,7 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - API keys are stored encrypted and never reach the renderer.
 - Adding a new adapter needs no UI changes.
 
-*2026-10-09, checked in the built app:* Claude Code (real 2.1.295) and a custom CLI configured and launched; Gemini and Codex configured and launched against stand-in `.cmd` shims only — **the owner still has to launch the real Gemini CLI and Codex CLI** (each: Add agent → ▶ Start; their Ready / Working / Waiting tracking is unchecked too). Keys: encrypted on disk, absent from every IPC response (`secrets.test.ts`) and from all user-data files. Adapters: Gemini, Codex and Custom CLI were added with no per-provider UI code — the dialog only reads `agents:providers` (`supportsInstructions`, `supportsModel`, `apiKeyEnv`, an empty `defaultExecutable`).
+*2026-10-09, checked in the built app:* Claude Code (real 2.1.295) and a custom CLI configured and launched; Gemini and Codex configured and launched against stand-in `.cmd` shims only — **the owner still has to launch the real Gemini CLI and Codex CLI** (each: Add agent → ▶ Start; their Ready / Working / Waiting tracking is unchecked too). Keys: encrypted on disk, absent from every IPC response (`secrets.test.ts`) and from all user-data files. Adapters: Gemini, Codex and Custom CLI were added with no per-provider UI code — the dialog only reads `agents:providers` (`supportsInstructions`, `supportsModel`, `apiKeyEnv`, an empty `defaultExecutable`). The owner then launched the real Gemini CLI and Codex CLI in the app, and both worked.
 
 ---
 
@@ -363,3 +363,4 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-09** — **P2 Terminal Engine done** (P2-05 … P2-07, P2-09 … P2-11). Marked done by the owner after the Done-when checks (typing with live output, screen kept on Ctrl+R, Stop ends child processes, no orphans after quit). Also fixed on the way: typing into a terminal did nothing in dev (double attach under React StrictMode), and terminals left `running` by an earlier run could not be attached.
 - **2026-10-09** — **P3 First CLI Agent built** (P3-01 … P3-07). Agents run through `terminals:create { agentId }` rather than a separate start channel, following V1 doc §15. New `agent:status` event and `agents:list` / `agents:create` / `agents:validate` channels; migration `0001_agent_session_statuses`. Done-when checks pass in the built app except a fresh `/login`, which is left for the owner.
 - **2026-10-09** — **P4 Agent Registry built** (P4-01 … P4-07). New channels `agents:update` / `agents:delete` / `agents:providers` / `agents:detect` and `credentials:list` / `credentials:set` / `credentials:delete`; migration `0002_credential_env_var`; adapters declare `supportsInstructions` / `supportsModel` / `apiKeyEnv`. Fixed on the way: multi-line arguments to `.cmd` shims were cut at the first line break. Done-when passes in the built app except launching the real Gemini CLI and Codex CLI, left for the owner.
+- **2026-10-09** — **P4 done**: the owner launched the real Gemini CLI and Codex CLI in the app, completing the Done-when checks.
