@@ -12,6 +12,10 @@ describe('parseTerminalClientMessage', () => {
       cols: 120,
       rows: 40,
     });
+    expect(parseTerminalClientMessage({ type: 'ack', chars: 5000 })).toEqual({
+      type: 'ack',
+      chars: 5000,
+    });
   });
 
   it('drops extra fields', () => {
@@ -35,6 +39,10 @@ describe('parseTerminalClientMessage', () => {
     { type: 'resize', cols: 1001, rows: 24 },
     { type: 'resize', cols: 80.5, rows: 24 },
     { type: 'resize', cols: '80', rows: '24' },
+    { type: 'ack' },
+    { type: 'ack', chars: 0 },
+    { type: 'ack', chars: -5 },
+    { type: 'ack', chars: 1.5 },
     { type: 'kill' },
     { type: 'spawn', file: 'calc.exe' },
   ])('refuses %j', (message) => {

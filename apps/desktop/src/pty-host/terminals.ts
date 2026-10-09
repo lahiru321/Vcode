@@ -1,4 +1,10 @@
-import { parseTerminalClientMessage, type TerminalHostMessage } from '@vcode/shared/terminal-port';
+import {
+  FLOW_HIGH_WATERMARK,
+  FLOW_LOW_WATERMARK,
+  OUTPUT_BATCH_MS,
+  parseTerminalClientMessage,
+  type TerminalHostMessage,
+} from '@vcode/shared/terminal-port';
 import type { IPty, IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
 import type { SpawnParams } from './protocol';
 
@@ -34,6 +40,13 @@ interface Terminal {
   output: string;
   /** The renderer's connection, if one is attached. */
   port?: TerminalPort;
+  /** Output waiting for the next batch to the renderer. */
+  pending: string;
+  flushTimer?: ReturnType<typeof setTimeout>;
+  /** Characters sent to the renderer that it hasn't acknowledged drawing yet. */
+  unacked: number;
+  /** Whether the process is paused because the renderer is behind. */
+  paused: boolean;
 }
 
 export class TerminalManager {
@@ -60,7 +73,7 @@ export class TerminalManager {
       cwd,
       env,
     });
-    const terminal: Terminal = { pty, output: '' };
+    const terminal: Terminal = { pty, output: '', pending: '', unacked: 0, paused: false };
     this.terminals.set(sessionId, terminal);
 
     pty.onData((data) => {
@@ -68,10 +81,16 @@ export class TerminalManager {
       if (terminal.output.length > MAX_BUFFERED_OUTPUT) {
         terminal.output = terminal.output.slice(-MAX_BUFFERED_OUTPUT);
       }
-      terminal.port?.postMessage({ type: 'data', data });
+      if (!terminal.port) {
+        return;
+      }
+      terminal.pending += data;
+      terminal.flushTimer ??= setTimeout(() => flush(terminal), OUTPUT_BATCH_MS);
+      updateFlow(terminal);
     });
     pty.onExit(({ exitCode, signal }) => {
       this.terminals.delete(sessionId);
+      flush(terminal);
       // node-pty reports signal 0 when there was none.
       const exit = { sessionId, exitCode, signal: signal ? signal : null };
       if (terminal.port) {
@@ -90,29 +109,44 @@ export class TerminalManager {
    */
   attach(sessionId: string, port: TerminalPort): void {
     const terminal = this.get(sessionId);
-    terminal.port?.close();
+    const previous = terminal.port;
+    // The replay below includes anything still waiting for a batch.
+    resetFlow(terminal);
     terminal.port = port;
+    previous?.close();
 
     port.on('message', ({ data }) => {
       const message = parseTerminalClientMessage(data);
       if (!message || terminal.port !== port) {
         return;
       }
-      if (message.type === 'input') {
-        terminal.pty.write(message.data);
-      } else {
-        terminal.pty.resize(message.cols, message.rows);
+      switch (message.type) {
+        case 'input':
+          terminal.pty.write(message.data);
+          break;
+        case 'resize':
+          terminal.pty.resize(message.cols, message.rows);
+          break;
+        case 'ack':
+          terminal.unacked = Math.max(0, terminal.unacked - message.chars);
+          updateFlow(terminal);
+          break;
       }
     });
     port.on('close', () => {
       if (terminal.port === port) {
         terminal.port = undefined;
+        // Nobody is drawing: let the process run; output keeps going to the buffer.
+        resetFlow(terminal);
+        updateFlow(terminal);
       }
     });
     port.start();
     if (terminal.output) {
       port.postMessage({ type: 'data', data: terminal.output });
+      terminal.unacked = terminal.output.length;
     }
+    updateFlow(terminal);
   }
 
   write(sessionId: string, data: string): void {
@@ -147,6 +181,11 @@ export class TerminalManager {
     return this.terminals.get(sessionId)?.port !== undefined;
   }
 
+  /** Whether the process is paused because the renderer is behind (for tests and diagnostics). */
+  isPaused(sessionId: string): boolean {
+    return this.terminals.get(sessionId)?.paused ?? false;
+  }
+
   list(): { sessionId: string; pid: number }[] {
     return [...this.terminals].map(([sessionId, { pty }]) => ({ sessionId, pid: pty.pid }));
   }
@@ -157,5 +196,39 @@ export class TerminalManager {
       throw new Error(`No running terminal ${sessionId}`);
     }
     return terminal;
+  }
+}
+
+/** Sends the waiting output as one message (V1 doc §11 "Back-pressure"). */
+function flush(terminal: Terminal): void {
+  clearTimeout(terminal.flushTimer);
+  terminal.flushTimer = undefined;
+  if (!terminal.pending || !terminal.port) {
+    terminal.pending = '';
+    return;
+  }
+  const data = terminal.pending;
+  terminal.pending = '';
+  terminal.unacked += data.length;
+  terminal.port.postMessage({ type: 'data', data });
+}
+
+/** Forgets output in flight to the current renderer, e.g. when it is replaced. */
+function resetFlow(terminal: Terminal): void {
+  clearTimeout(terminal.flushTimer);
+  terminal.flushTimer = undefined;
+  terminal.pending = '';
+  terminal.unacked = 0;
+}
+
+/** Pauses the process while the renderer is too far behind; resumes it once it catches up. */
+function updateFlow(terminal: Terminal): void {
+  const behind = terminal.unacked + terminal.pending.length;
+  if (!terminal.paused && behind > FLOW_HIGH_WATERMARK) {
+    terminal.paused = true;
+    terminal.pty.pause();
+  } else if (terminal.paused && behind < FLOW_LOW_WATERMARK) {
+    terminal.paused = false;
+    terminal.pty.resume();
   }
 }

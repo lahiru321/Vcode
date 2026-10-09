@@ -134,7 +134,9 @@ export function TerminalView({ terminalId, active, onExit }: TerminalViewProps) 
         port.onmessage = (event: MessageEvent<TerminalHostMessage>) => {
           const message = event.data;
           if (message.type === 'data') {
-            terminal.write(message.data);
+            // Acknowledged once drawn: the PTY host pauses the process while we are behind.
+            const chars = message.data.length;
+            terminal.write(message.data, () => send({ type: 'ack', chars }));
           } else {
             // Dimmed note, then hide the cursor: the terminal takes no more input.
             terminal.write(

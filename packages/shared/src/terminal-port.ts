@@ -6,12 +6,25 @@
 export type TerminalHostMessage =
   { type: 'data'; data: string } | { type: 'exit'; exitCode: number; signal: number | null };
 
-/** Renderer → PTY host. */
+/**
+ * Renderer → PTY host. `ack` reports how many characters of `data` the terminal has finished
+ * drawing; the host pauses a process whose output the renderer can't keep up with.
+ */
 export type TerminalClientMessage =
-  { type: 'input'; data: string } | { type: 'resize'; cols: number; rows: number };
+  | { type: 'input'; data: string }
+  | { type: 'resize'; cols: number; rows: number }
+  | { type: 'ack'; chars: number };
 
 /** Largest input accepted in one message (a big paste is split by the renderer). */
 export const MAX_TERMINAL_INPUT = 1024 * 1024;
+
+/** Output is sent to the renderer in batches, at most this often (V1 doc §11 "Back-pressure"). */
+export const OUTPUT_BATCH_MS = 16;
+/** Sent but not yet drawn output above which the process is paused… */
+export const FLOW_HIGH_WATERMARK = 100_000;
+/** …and below which it is resumed. */
+export const FLOW_LOW_WATERMARK = 5_000;
+const ACK_CHARS = { min: 1, max: 1_000_000_000 } as const;
 export const TERMINAL_COLS = { min: 2, max: 1000 } as const;
 export const TERMINAL_ROWS = { min: 1, max: 500 } as const;
 
@@ -43,6 +56,9 @@ export function parseTerminalClientMessage(value: unknown): TerminalClientMessag
     inRange(message['rows'], TERMINAL_ROWS)
   ) {
     return { type: 'resize', cols: message['cols'], rows: message['rows'] };
+  }
+  if (message['type'] === 'ack' && inRange(message['chars'], ACK_CHARS)) {
+    return { type: 'ack', chars: message['chars'] };
   }
   return null;
 }

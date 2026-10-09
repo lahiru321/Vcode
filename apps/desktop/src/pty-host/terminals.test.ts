@@ -1,7 +1,12 @@
 import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import { spawn as spawnPty, type IPty } from 'node-pty';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  FLOW_HIGH_WATERMARK,
+  FLOW_LOW_WATERMARK,
+  OUTPUT_BATCH_MS,
+} from '@vcode/shared/terminal-port';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalManager, type SpawnPty, type TerminalExit, type TerminalPort } from './terminals';
 
 const isWindows = process.platform === 'win32';
@@ -23,6 +28,8 @@ function fakePty(pid = 4242) {
     write: vi.fn(),
     resize: vi.fn(),
     kill: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
   };
   return {
     pty: pty as unknown as IPty,
@@ -138,6 +145,13 @@ class FakePort extends EventEmitter {
 }
 
 describe('TerminalManager.attach', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function attached() {
     const fake = fakePty();
     const manager = new TerminalManager(() => fake.pty, vi.fn());
@@ -152,10 +166,71 @@ describe('TerminalManager.attach', () => {
     manager.attach('s1', port as unknown as TerminalPort);
     expect(port.started).toBe(true);
     fake.data('after');
+    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
     expect(port.posted).toEqual([
       { type: 'data', data: 'before ' },
       { type: 'data', data: 'after' },
     ]);
+  });
+
+  it('sends output in batches', () => {
+    const { fake, manager } = attached();
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    fake.data('a');
+    fake.data('b');
+    expect(port.posted).toEqual([]);
+    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    fake.data('c');
+    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    expect(port.posted).toEqual([
+      { type: 'data', data: 'ab' },
+      { type: 'data', data: 'c' },
+    ]);
+  });
+
+  it('pauses the process while the renderer is behind, and resumes it once it catches up', () => {
+    const { fake, manager } = attached();
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    const chunk = 'x'.repeat(FLOW_HIGH_WATERMARK / 2);
+
+    fake.data(chunk);
+    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    expect(fake.calls.pause).not.toHaveBeenCalled();
+    fake.data(chunk);
+    fake.data('y'); // still waiting for its batch, but counts
+    expect(fake.calls.pause).toHaveBeenCalledOnce();
+    expect(manager.isPaused('s1')).toBe(true);
+    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+
+    port.fromRenderer({ type: 'ack', chars: chunk.length });
+    expect(fake.calls.resume).not.toHaveBeenCalled(); // still above the low watermark
+    port.fromRenderer({ type: 'ack', chars: chunk.length + 1 - FLOW_LOW_WATERMARK + 1 });
+    expect(fake.calls.resume).toHaveBeenCalledOnce();
+    expect(manager.isPaused('s1')).toBe(false);
+  });
+
+  it('counts the replay as unacknowledged output', () => {
+    const { fake, manager } = attached();
+    fake.data('x'.repeat(FLOW_HIGH_WATERMARK + 1));
+    expect(fake.calls.pause).not.toHaveBeenCalled(); // nobody attached: no back-pressure
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    expect(fake.calls.pause).toHaveBeenCalledOnce();
+    port.fromRenderer({ type: 'ack', chars: FLOW_HIGH_WATERMARK + 1 });
+    expect(fake.calls.resume).toHaveBeenCalledOnce();
+  });
+
+  it('resumes a paused process when the renderer goes away', () => {
+    const { fake, manager } = attached();
+    const port = new FakePort();
+    manager.attach('s1', port as unknown as TerminalPort);
+    fake.data('x'.repeat(FLOW_HIGH_WATERMARK + 1));
+    expect(manager.isPaused('s1')).toBe(true);
+    port.close();
+    expect(fake.calls.resume).toHaveBeenCalledOnce();
+    expect(manager.isPaused('s1')).toBe(false);
   });
 
   it('sends nothing on attach when there is no output yet', () => {
@@ -187,6 +262,7 @@ describe('TerminalManager.attach', () => {
     expect(first.closed).toBe(true);
     first.fromRenderer({ type: 'input', data: 'stale' });
     fake.data('x');
+    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
     expect(fake.calls.write).not.toHaveBeenCalled();
     expect(second.posted).toEqual([{ type: 'data', data: 'x' }]);
     expect(manager.isAttached('s1')).toBe(true);
@@ -202,13 +278,19 @@ describe('TerminalManager.attach', () => {
     expect(manager.output('s1')).toBe('later');
   });
 
-  it('tells the renderer when the process exits, then closes the port', () => {
+  it('sends the last output, then tells the renderer the process exited and closes the port', () => {
     const { fake, manager } = attached();
     const port = new FakePort();
     manager.attach('s1', port as unknown as TerminalPort);
+    fake.data('bye');
     fake.exit(2);
-    expect(port.posted.at(-1)).toEqual({ type: 'exit', exitCode: 2, signal: null });
+    expect(port.posted).toEqual([
+      { type: 'data', data: 'bye' },
+      { type: 'exit', exitCode: 2, signal: null },
+    ]);
     expect(port.closed).toBe(true);
+    vi.advanceTimersByTime(OUTPUT_BATCH_MS);
+    expect(port.posted).toHaveLength(2);
   });
 
   it('refuses an unknown terminal', () => {
@@ -268,6 +350,52 @@ describe('TerminalManager (real node-pty)', () => {
       },
     );
     expect(manager.size).toBe(0);
+  });
+
+  it('pauses a noisy process until the renderer catches up', async () => {
+    const exits: TerminalExit[] = [];
+    manager = new TerminalManager(spawnPty, (exit) => exits.push(exit));
+    manager.spawn({
+      sessionId: 'noisy',
+      file: shell,
+      args: shellArgs,
+      cwd: process.cwd(),
+      env: process.env as Record<string, string>,
+      cols: 100,
+      rows: 30,
+    });
+    const port = new FakePort();
+    manager.attach('noisy', port as unknown as TerminalPort);
+
+    // Far more output than the high watermark; the renderer acknowledges nothing yet.
+    const command = isWindows
+      ? '1..20000 | ForEach-Object { "line $_ of noisy output" }; exit 0'
+      : 'i=0; while [ $i -lt 20000 ]; do echo "line $i of noisy output"; i=$((i+1)); done; exit 0';
+    manager.write('noisy', command + enter);
+    await vi.waitFor(() => expect(manager!.isPaused('noisy')).toBe(true), {
+      timeout: 15_000,
+      interval: 50,
+    });
+    expect(exits).toEqual([]);
+
+    // Now draw everything as it arrives: the process resumes and finishes.
+    let acked = 0;
+    await vi.waitFor(
+      () => {
+        const sent = port.posted
+          .filter(
+            (m): m is { type: 'data'; data: string } => (m as { type: string }).type === 'data',
+          )
+          .reduce((n, m) => n + m.data.length, 0);
+        if (sent > acked) {
+          port.fromRenderer({ type: 'ack', chars: sent - acked });
+          acked = sent;
+        }
+        expect(exits).toHaveLength(1);
+      },
+      { timeout: 30_000, interval: 50 },
+    );
+    expect(exits[0]!.exitCode).toBe(0);
   });
 
   it('reports a process that cannot be started', async () => {
