@@ -34,8 +34,8 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P2 — Terminal Engine
 
 **Next up:**
-1. `P2-11` Integration test: spawn shell, echo text, kill the process tree
-2. Check P2's **Done when** list, then start P3 (First CLI Agent)
+1. Check P2's **Done when** list in the app (all P2 tasks are done)
+2. Start P3 (First CLI Agent)
 
 ---
 
@@ -140,7 +140,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-09:* At launch, before the UI can list terminals, sessions still `starting`/`running` from an earlier run are marked `failed` (`failStaleSessions`). Then, in the background (`terminals/orphans.ts`), their PIDs are looked up with the new `platform.processInfo(pids)` — Windows: one `Get-CimInstance Win32_Process` query (name + `CreationDate`); macOS: `ps -o pid=,lstart=,comm=` in the C locale (whole seconds; login shells' leading `-` stripped) — and a process is ended (`killProcessTree`) **only if** its executable name matches the session's `shell` and it started between 2 s before and 60 s after the session's `started_at`, so a reused PID is never touched. No schema change: the name comes from `shell` (P3 agent sessions may need the spawned file stored). Results go to the log. Tests: matching rules (name case, `-zsh`, reused PID, wrong start time), kill only matches, no PIDs, failed kill, a **real** leftover Node process ended, and `processInfo` against real processes.
 - [x] **P2-10** · Terminal safety: confirm before opening links; block OSC 52 clipboard writes · `S`
   - *2026-10-09:* Detected URLs already went through `window.open` → main's "Open this link in your browser?" (http/https only, P1/P2-04). Now **OSC 8 hyperlinks** (link text can differ from the target) use the same path via xterm's `linkHandler` (`allowNonHttpProtocols: false`) instead of xterm's built-in prompt; the dialog shows the real URL. **OSC 52** (clipboard write/read) is swallowed by a parser handler (`features/terminals/safety.ts`) — xterm.js ignores it without the clipboard add-on, and this keeps it blocked if one is ever loaded. Renderer tests (DOM-free) now run in vitest; checked against `@xterm/headless`: OSC 52 never reaches another handler (BEL and ST forms), other OSC sequences still work, link handler passes the real target.
-- [ ] **P2-11** · Integration test: spawn shell, echo text, kill the process tree · `M`
+- [x] **P2-11** · Integration test: spawn shell, echo text, kill the process tree · `M`
+  - *2026-10-09:* `src/main/terminals/integration.test.ts`: a real shell (Windows PowerShell / `sh`) in the PTY host's `TerminalManager` with real node-pty, a renderer stand-in on the port that acks output like `TerminalView`, typed input → computed output (`e2e-42`), then the shell starts a long-running Node child that prints its PID; the real `platform.killProcessTree` (what `terminals:stop` calls) ends the tree → the exit reaches main and the renderer, and the child is gone. Electron itself (utilityProcess, MessageChannelMain, the window) is covered by the manual **Done when** checks below until P7's E2E smoke tests.
 
 **Done when:**
 - You can type commands in a PowerShell terminal and see live output.
