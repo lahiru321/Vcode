@@ -2,6 +2,7 @@ import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import pino, { type Level, type Logger } from 'pino';
 import { consoleStream } from './console';
+import { redactingStream } from './redact';
 
 // Main-process logging (V1 doc §22: pino, files in the user-data folder). The root logger exists
 // from the first import so modules can create their child loggers at load time; until
@@ -68,10 +69,10 @@ export function initLogging(options: LoggingOptions): string {
 
   streams.add({
     level: options.level,
-    stream: pino.destination({ dest: logFile, sync: true, mkdir: true }),
+    stream: redactingStream(pino.destination({ dest: logFile, sync: true, mkdir: true })),
   });
   if (options.console) {
-    streams.add({ level: options.level, stream: consoleStream() });
+    streams.add({ level: options.level, stream: redactingStream(consoleStream()) });
   }
 
   pruneOldLogs(options.dir);

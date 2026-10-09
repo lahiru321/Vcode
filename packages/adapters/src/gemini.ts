@@ -15,6 +15,7 @@ export class GeminiAdapter extends CliAdapter {
   readonly displayName = 'Gemini CLI';
   readonly defaultExecutable = 'gemini';
   readonly supportsInstructions = false;
+  override readonly apiKeyEnv = 'GEMINI_API_KEY';
 
   protected override launchArgs(config: AgentConfig): string[] {
     const model = config.model?.trim();

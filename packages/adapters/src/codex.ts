@@ -11,6 +11,7 @@ export class CodexAdapter extends CliAdapter {
   readonly displayName = 'Codex CLI';
   readonly defaultExecutable = 'codex';
   readonly supportsInstructions = true;
+  override readonly apiKeyEnv = 'OPENAI_API_KEY';
 
   protected override launchArgs(config: AgentConfig): string[] {
     const args: string[] = [];

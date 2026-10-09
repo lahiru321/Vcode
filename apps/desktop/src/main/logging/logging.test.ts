@@ -74,6 +74,24 @@ describe('logging', () => {
     expect(readFileSync(file, 'utf8')).not.toMatch(/sk-1|t-2/);
   });
 
+  it('redacts secret values in messages, fields and error stacks', () => {
+    const file = logging.initLogging({ dir: tempDir(), level: 'info', console: false });
+    const secret = 'sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz012345';
+    const log = logging.createLogger('test');
+    log.info({ command: `claude --key ${secret}` }, `starting with ${secret}`);
+    log.error({ err: new Error(`401 for key ${secret}`) }, 'request failed');
+    log.warn({ env: { OPENAI_API_KEY: 'sk-proj-short' } }, 'nested');
+    const text = readFileSync(file, 'utf8');
+    expect(text).not.toContain(secret);
+    expect(text).not.toContain('sk-proj-short');
+    const [first, second] = readLines(file);
+    expect(first).toMatchObject({
+      msg: 'starting with [redacted]',
+      command: 'claude --key [redacted]',
+    });
+    expect(second).toMatchObject({ err: { message: '401 for key [redacted]' } });
+  });
+
   it('serialises errors with their stack', () => {
     const file = logging.initLogging({ dir: tempDir(), level: 'info', console: false });
     logging.createLogger('test').error({ err: new Error('boom') }, 'failed');

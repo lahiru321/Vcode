@@ -13,6 +13,7 @@ import {
   summarizeAgentSessions,
   type AgentSessionSummary,
 } from '../agents/sessions';
+import { credentialEnvironment, type SecretBox } from '../credentials/service';
 import type { AppDatabase } from '../db';
 import { agents, terminalSessions, workspaces } from '../db/schema';
 import { resolveExistingFolder } from '../fs/folders';
@@ -43,6 +44,8 @@ export interface TerminalDeps {
   killProcessTree: (pid: number) => Promise<void>;
   /** What agent adapters may use (terminals that run an agent). */
   adapters: AdapterContext;
+  /** Decrypts an agent's API key (credentials) into its environment at launch. */
+  secrets: SecretBox;
 }
 
 const log = createLogger('terminals');
@@ -183,6 +186,10 @@ async function agentLaunch(
   const adapter = adapterFor(row.adapter);
   const config = agentConfig(row);
   const env = adapter.prepareEnvironment(config, baseEnv);
+  if (row.credentialId) {
+    // Decrypted only here, straight into the agent's environment (V1 doc §16).
+    Object.assign(env, credentialEnvironment(deps.db, deps.secrets, row.credentialId));
+  }
   let launch;
   try {
     launch = await adapter.buildCommand(config, deps.adapters, { env, cwd });

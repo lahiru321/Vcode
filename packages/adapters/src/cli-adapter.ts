@@ -44,6 +44,8 @@ export abstract class CliAdapter implements AgentAdapter {
   abstract readonly displayName: string;
   abstract readonly defaultExecutable: string;
   abstract readonly supportsInstructions: boolean;
+  readonly supportsModel: boolean = true;
+  readonly apiKeyEnv: string | null = null;
   /** Arguments that print the version and exit. */
   protected readonly versionArgs: string[] = ['--version'];
 
@@ -58,10 +60,10 @@ export abstract class CliAdapter implements AgentAdapter {
     env: Environment,
   ): Promise<Executable | null> {
     const command = config.executable.trim() || this.defaultExecutable;
-    return ctx.platform.resolveExecutable(command, env);
+    return command ? ctx.platform.resolveExecutable(command, env) : null;
   }
 
-  private notFoundMessage(config: AgentConfig): string {
+  protected notFoundMessage(config: AgentConfig): string {
     const command = config.executable.trim() || this.defaultExecutable;
     return `${this.displayName} was not found ("${command}"). Install it, or set the path to its executable.`;
   }

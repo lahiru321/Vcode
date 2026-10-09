@@ -93,9 +93,14 @@ describe('createAgent', () => {
     });
   });
 
-  it('refuses providers without an adapter and unknown projects', () => {
+  it('a custom CLI needs a command; unknown projects are refused', () => {
     const db = testDatabase();
-    expect(() => createAgent(db, { name: 'X', adapter: 'custom' })).toThrow(IpcError);
+    expect(() => createAgent(db, { name: 'X', adapter: 'custom' })).toThrow(
+      expect.objectContaining({ code: 'INVALID_REQUEST', message: 'Enter the command to run.' }),
+    );
+    const custom = createAgent(db, { name: 'Aider', adapter: 'custom', executable: ' aider ' });
+    expect(custom.executable).toBe('aider');
+    expect(() => updateAgent(db, { id: custom.id, executable: ' ' })).toThrow(IpcError);
     expect(() => createAgent(db, { name: 'C', adapter: 'claude', projectId: MISSING_ID })).toThrow(
       /not found/i,
     );
@@ -106,7 +111,8 @@ describe('CreateAgentRequest', () => {
   it('rejects bad environment names and unknown keys', () => {
     const base = { name: 'C', adapter: 'claude' };
     expect(CreateAgentRequest.safeParse({ ...base, env: { 'A=B': 'x' } }).success).toBe(false);
-    expect(CreateAgentRequest.safeParse({ ...base, credentialId: MISSING_ID }).success).toBe(false);
+    expect(CreateAgentRequest.safeParse({ ...base, apiKey: 'sk-x' }).success).toBe(false);
+    expect(CreateAgentRequest.safeParse({ ...base, credentialId: MISSING_ID }).success).toBe(true);
     expect(CreateAgentRequest.safeParse({ ...base, name: '  ' }).success).toBe(false);
     expect(CreateAgentRequest.safeParse({ ...base, env: { A_1: 'x' } }).success).toBe(true);
   });
@@ -264,18 +270,32 @@ describe('listProviders', () => {
         displayName: 'Claude Code',
         defaultExecutable: 'claude',
         supportsInstructions: true,
+        supportsModel: true,
+        apiKeyEnv: 'ANTHROPIC_API_KEY',
       },
       {
         id: 'gemini',
         displayName: 'Gemini CLI',
         defaultExecutable: 'gemini',
         supportsInstructions: false,
+        supportsModel: true,
+        apiKeyEnv: 'GEMINI_API_KEY',
       },
       {
         id: 'codex',
         displayName: 'Codex CLI',
         defaultExecutable: 'codex',
         supportsInstructions: true,
+        supportsModel: true,
+        apiKeyEnv: 'OPENAI_API_KEY',
+      },
+      {
+        id: 'custom',
+        displayName: 'Custom CLI',
+        defaultExecutable: '',
+        supportsInstructions: false,
+        supportsModel: false,
+        apiKeyEnv: null,
       },
     ]);
   });
@@ -352,9 +372,19 @@ describe('detectAgent', () => {
     expect(failing).toMatchObject({ status: 'error', path: '/bin/claude', message: /boom/ });
   });
 
-  it('refuses providers without an adapter', async () => {
-    await expect(detectAgent(deps(testDatabase()), { adapter: 'custom' })).rejects.toThrow(
-      IpcError,
-    );
+  it('asks for a command for a custom CLI, and never runs it to check it', async () => {
+    const run = vi.fn();
+    const d = deps(testDatabase(), { run });
+    await expect(detectAgent(d, { adapter: 'custom' })).resolves.toMatchObject({
+      status: 'not_found',
+      message: 'Enter the command to run.',
+    });
+    await expect(detectAgent(d, { adapter: 'custom', executable: 'aider' })).resolves.toEqual({
+      status: 'ready',
+      path: '/bin/aider',
+      version: null,
+      message: null,
+    });
+    expect(run).not.toHaveBeenCalled();
   });
 });

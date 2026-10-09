@@ -99,12 +99,10 @@ describe('CodexAdapter with the real platform layer', () => {
       { env, cwd: dir },
     );
     const result = await runCommand(command, { env, timeoutMs: 15_000 });
-    const argv = JSON.parse(result.stdout) as string[];
-    expect(argv[0]).toBe('-c');
-    const [key, value] = [
-      argv[1].slice(0, argv[1].indexOf('=')),
-      argv[1].slice(argv[1].indexOf('=') + 1),
-    ];
+    const [flag, setting = ''] = JSON.parse(result.stdout) as string[];
+    expect(flag).toBe('-c');
+    const key = setting.slice(0, setting.indexOf('='));
+    const value = setting.slice(setting.indexOf('=') + 1);
     expect(key).toBe('developer_instructions');
     // The value is a TOML basic string (a JSON string is one); line breaks survive escaped.
     expect(JSON.parse(value)).toBe(instructions);

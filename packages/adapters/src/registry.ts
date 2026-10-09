@@ -1,11 +1,14 @@
 import { ClaudeAdapter } from './claude';
 import { CodexAdapter } from './codex';
+import { CustomCliAdapter } from './custom';
 import { GeminiAdapter } from './gemini';
 import type { AgentAdapter } from './types';
 
-// Adapters by `agents.adapter` value, in the order the UI lists them. Custom CLIs: P4-04.
+// Adapters by `agents.adapter` value, in the order the UI lists them.
 const adapters = new Map<string, AgentAdapter>(
-  [new ClaudeAdapter(), new GeminiAdapter(), new CodexAdapter()].map((a) => [a.id, a]),
+  [new ClaudeAdapter(), new GeminiAdapter(), new CodexAdapter(), new CustomCliAdapter()].map(
+    (a) => [a.id, a],
+  ),
 );
 
 /** The adapter for an `agents.adapter` value, or null if there is none yet. */

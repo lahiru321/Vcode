@@ -2,6 +2,7 @@ import type {
   Agent,
   AgentDetection,
   AgentProvider,
+  Credential,
   CreateAgentRequest,
   DetectAgentRequest,
   Project,
@@ -20,6 +21,13 @@ import {
 import { Input } from '@renderer/components/ui/input';
 import { Label } from '@renderer/components/ui/label';
 import { Textarea } from '@renderer/components/ui/textarea';
+import {
+  CredentialFields,
+  draftProblem,
+  emptyDraft,
+  toRequest,
+  type CredentialDraft,
+} from '@renderer/features/credentials/CredentialForm';
 import { errorMessage, FormError, useSubmit } from '@renderer/lib/form';
 import { invoke } from '@renderer/lib/ipc';
 import { cn } from '@renderer/lib/utils';
@@ -53,20 +61,20 @@ export function AgentDialog({ open, agent, project, onSave, onClose }: AgentDial
   );
 }
 
-type Providers = { list: AgentProvider[] } | { error: string } | null;
+type Loaded = { providers: AgentProvider[]; credentials: Credential[] } | { error: string } | null;
 
 function AgentLoader({
   agent,
   project,
   onSave,
 }: Pick<AgentDialogProps, 'agent' | 'project' | 'onSave'>) {
-  const [providers, setProviders] = useState<Providers>(null);
+  const [loaded, setLoaded] = useState<Loaded>(null);
 
   useEffect(() => {
     let cancelled = false;
-    invoke('agents:providers').then(
-      (list) => !cancelled && setProviders({ list }),
-      (error: unknown) => !cancelled && setProviders({ error: errorMessage(error) }),
+    Promise.all([invoke('agents:providers'), invoke('credentials:list')]).then(
+      ([providers, credentials]) => !cancelled && setLoaded({ providers, credentials }),
+      (error: unknown) => !cancelled && setLoaded({ error: errorMessage(error) }),
     );
     return () => {
       cancelled = true;
@@ -74,18 +82,36 @@ function AgentLoader({
   }, []);
 
   const editing = agent !== null;
-  if (!providers) {
+  if (!loaded) {
     return <DialogHeading editing={editing} />;
   }
-  if ('error' in providers || providers.list.length === 0) {
+  if ('error' in loaded) {
     return (
       <>
         <DialogHeading editing={editing} />
-        <FormError message={'error' in providers ? providers.error : 'No providers available.'} />
+        <FormError message={loaded.error} />
       </>
     );
   }
-  return <AgentForm providers={providers.list} agent={agent} project={project} onSave={onSave} />;
+  const initial = agent ? providerOf(agent, loaded.providers) : loaded.providers[0];
+  if (!initial) {
+    return (
+      <>
+        <DialogHeading editing={editing} />
+        <FormError message="No providers available." />
+      </>
+    );
+  }
+  return (
+    <AgentForm
+      providers={loaded.providers}
+      credentials={loaded.credentials}
+      initialProvider={initial}
+      agent={agent}
+      project={project}
+      onSave={onSave}
+    />
+  );
 }
 
 function DialogHeading({ editing }: { editing: boolean }) {
@@ -95,7 +121,7 @@ function DialogHeading({ editing }: { editing: boolean }) {
       <DialogDescription>
         {editing
           ? 'Changes apply the next time the agent starts.'
-          : 'A coding CLI that Vcode can start in a terminal. It signs in with its own login.'}
+          : 'A coding CLI that Vcode can start in a terminal. It signs in with its own login, or with an API key you save here.'}
       </DialogDescription>
     </DialogHeader>
   );
@@ -109,6 +135,15 @@ function lines(text: string): string[] {
     .filter(Boolean);
 }
 
+/** Keys meant for `provider` first, then the rest; each group by name. */
+function sortKeys(keys: Credential[], provider: string): Credential[] {
+  return [...keys].sort(
+    (a, b) =>
+      Number(b.provider === provider) - Number(a.provider === provider) ||
+      a.name.localeCompare(b.name),
+  );
+}
+
 /** The agent's provider; one that has no adapter any more is shown as it was saved. */
 function providerOf(agent: Agent, providers: AgentProvider[]): AgentProvider {
   return (
@@ -117,26 +152,30 @@ function providerOf(agent: Agent, providers: AgentProvider[]): AgentProvider {
       displayName: agent.adapter,
       defaultExecutable: agent.executable,
       supportsInstructions: true,
+      supportsModel: true,
+      apiKeyEnv: null,
     }
   );
 }
 
 function AgentForm({
   providers,
+  credentials,
+  initialProvider,
   agent,
   project,
   onSave,
 }: {
   providers: AgentProvider[];
+  credentials: Credential[];
+  initialProvider: AgentProvider;
   agent: Agent | null;
   project: Project | null;
   onSave: AgentDialogProps['onSave'];
 }) {
   const ids = useId();
   const editing = agent !== null;
-  const [provider, setProvider] = useState(() =>
-    agent ? providerOf(agent, providers) : providers[0],
-  );
+  const [provider, setProvider] = useState(initialProvider);
   const [name, setName] = useState(agent?.name ?? provider.displayName);
   const [nameEdited, setNameEdited] = useState(editing);
   const [scope, setScope] = useState<'global' | 'project'>(agent?.projectId ? 'project' : 'global');
@@ -150,6 +189,16 @@ function AgentForm({
   const [instructions, setInstructions] = useState(agent?.instructions ?? '');
   // An agent being edited belongs to the selected project (the list shows no others).
   const scopeProjectId = project?.id ?? agent?.projectId ?? null;
+  // 'none' (the CLI's own login), 'new' (entered below, saved first) or a credential id.
+  const [keyChoice, setKeyChoice] = useState<string>(agent?.credentialId ?? 'none');
+  const [keys, setKeys] = useState(credentials);
+  const [newKey, setNewKey] = useState<CredentialDraft>(() =>
+    emptyDraft(
+      provider,
+      credentials.map((c) => c.name),
+    ),
+  );
+  const newKeyProblem = keyChoice === 'new' ? draftProblem(newKey, false) : null;
 
   // Auto-detect: runs for the agent's CLI at first, and again whenever the provider changes,
   // the executable field loses focus with a new value, or the user asks.
@@ -171,9 +220,18 @@ function AgentForm({
     detect({ adapter: next.id, executable: executable.trim() || undefined });
   };
 
-  const { pending, error, submit } = useSubmit(() =>
-    onSave(provider.id, {
+  const { pending, error, submit } = useSubmit(async () => {
+    // A new key is saved first; if the agent then fails, it stays under API keys.
+    let credentialId = keyChoice === 'none' ? null : keyChoice;
+    if (keyChoice === 'new') {
+      const created = await invoke('credentials:set', toRequest(newKey));
+      setKeys((current) => [...current, created]);
+      setKeyChoice(created.id);
+      credentialId = created.id;
+    }
+    await onSave(provider.id, {
       projectId: scope === 'project' ? scopeProjectId : null,
+      credentialId,
       name: name.trim(),
       // '' (not undefined) so an edit can go back to the default.
       executable: executable.trim(),
@@ -181,9 +239,11 @@ function AgentForm({
       model: model.trim() || null,
       role: role.trim() || null,
       instructions: instructions.trim() || null,
-    }),
-  );
+    });
+  });
 
+  // Custom CLIs have no default command.
+  const needsExecutable = provider.defaultExecutable === '';
   const options = providers.includes(provider) ? providers : [provider, ...providers];
 
   return (
@@ -246,13 +306,17 @@ function AgentForm({
       <Field
         label="Executable"
         htmlFor={`${ids}-executable`}
-        hint={`Leave blank to use “${provider.defaultExecutable}” from PATH, or enter a command or full path.`}
+        hint={
+          needsExecutable
+            ? 'Required. A command on PATH or the full path to a program. Arguments go below.'
+            : `Leave blank to use “${provider.defaultExecutable}” from PATH, or enter a command or full path.`
+        }
       >
         <div className="flex gap-2">
           <Input
             id={`${ids}-executable`}
             value={executable}
-            placeholder={provider.defaultExecutable}
+            placeholder={provider.defaultExecutable || 'e.g. aider'}
             spellCheck={false}
             className="font-mono"
             onChange={(event) => setExecutable(event.target.value)}
@@ -274,21 +338,69 @@ function AgentForm({
             Detect
           </Button>
         </div>
-        <DetectionStatus
-          detection={detection}
-          displayName={provider.displayName}
-          editing={editing}
-        />
+        {/* Nothing to look for until a custom CLI has a command. */}
+        {!(needsExecutable && !probedExecutable) && (
+          <DetectionStatus
+            detection={detection}
+            displayName={provider.displayName}
+            editing={editing}
+          />
+        )}
+      </Field>
+
+      <Field
+        label="API key"
+        htmlFor={`${ids}-key`}
+        hint={
+          keyChoice === 'none'
+            ? `${provider.displayName} signs in with its own login (e.g. its /login command).`
+            : undefined
+        }
+      >
+        <select
+          id={`${ids}-key`}
+          value={keyChoice}
+          onChange={(event) => setKeyChoice(event.target.value)}
+          className={cn(
+            'h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none dark:bg-input/30',
+            'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+          )}
+        >
+          <option value="none" className="bg-popover text-popover-foreground">
+            None: use the CLI’s own login
+          </option>
+          {sortKeys(keys, provider.id).map((key) => (
+            <option key={key.id} value={key.id} className="bg-popover text-popover-foreground">
+              {key.name} ({key.envVar}){key.status === 'unavailable' ? ' · can’t decrypt' : ''}
+            </option>
+          ))}
+          <option value="new" className="bg-popover text-popover-foreground">
+            New API key…
+          </option>
+        </select>
+        {keyChoice === 'new' && (
+          <CredentialFields
+            draft={newKey}
+            onChange={setNewKey}
+            providers={providers}
+            className="rounded-md border bg-muted/30 p-3"
+          />
+        )}
       </Field>
 
       <Field
         label="Model"
         htmlFor={`${ids}-model`}
-        hint="Optional. Leave blank for the CLI's default."
+        hint={
+          provider.supportsModel
+            ? "Optional. Leave blank for the CLI's default."
+            : `${provider.displayName} has no model setting. Pass one in the arguments if the CLI takes it.`
+        }
       >
         <Input
           id={`${ids}-model`}
           value={model}
+          disabled={!provider.supportsModel}
           maxLength={200}
           spellCheck={false}
           onChange={(event) => setModel(event.target.value)}
@@ -345,7 +457,16 @@ function AgentForm({
       <FormError message={error} />
 
       <DialogFooter>
-        <Button type="submit" disabled={pending || name.trim().length === 0}>
+        <Button
+          type="submit"
+          disabled={
+            pending ||
+            name.trim().length === 0 ||
+            (needsExecutable && !executable.trim()) ||
+            newKeyProblem !== null
+          }
+          title={newKeyProblem ?? undefined}
+        >
           {editing ? (pending ? 'Saving…' : 'Save') : pending ? 'Adding…' : 'Add agent'}
         </Button>
       </DialogFooter>

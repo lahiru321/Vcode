@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { terminalSessions, workspaces } from '../db/schema';
 import { createProject, updateProject } from '../projects/service';
 import { PtyHostError } from '../pty-host/supervisor';
-import { tempDir, testDatabase } from '../testing';
+import { fakeSecretBox, tempDir, testDatabase } from '../testing';
 import {
   attachTerminal,
   closeTerminal,
@@ -36,6 +36,7 @@ function setup(
     environment: async () => ({ PATH: '/usr/bin' }),
     resolveShell: async () => SHELL,
     killProcessTree: vi.fn(async () => {}),
+    secrets: fakeSecretBox(),
     adapters: {
       platform: {
         resolveExecutable: async (command) =>

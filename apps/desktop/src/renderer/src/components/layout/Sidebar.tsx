@@ -1,18 +1,20 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { APP_NAME } from '@vcode/shared';
-import { FolderPlus, Layers, Plus, Settings } from 'lucide-react';
+import { FolderPlus, KeyRound, Layers, Plus, Settings } from 'lucide-react';
 import { Button } from '@renderer/components/ui/button';
 import { ScrollArea } from '@renderer/components/ui/scroll-area';
 import { Separator } from '@renderer/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip';
 import { AgentList } from '@renderer/features/agents/AgentList';
 import { useAgents } from '@renderer/features/agents/AgentsProvider';
+import { ApiKeysDialog } from '@renderer/features/credentials/ApiKeysDialog';
 import { ProjectList } from '@renderer/features/projects/ProjectList';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 
 export function Sidebar() {
   const { startAdd, selected } = useProjects();
   const agents = useAgents();
+  const [keysOpen, setKeysOpen] = useState(false);
 
   return (
     <aside className="flex min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -43,12 +45,26 @@ export function Sidebar() {
 
       <Separator className="bg-sidebar-border" />
 
-      <div className="p-2">
+      <div className="flex flex-col gap-0.5 p-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-muted-foreground"
+          onClick={() => setKeysOpen(true)}
+        >
+          <KeyRound />
+          API keys
+        </Button>
         <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
           <Settings />
           Settings
         </Button>
       </div>
+      <ApiKeysDialog
+        open={keysOpen}
+        onClose={() => setKeysOpen(false)}
+        onChanged={() => void agents.reload()}
+      />
     </aside>
   );
 }

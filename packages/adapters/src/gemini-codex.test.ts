@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CodexAdapter } from './codex';
+import { CustomCliAdapter } from './custom';
 import { GeminiAdapter } from './gemini';
 import { getAdapter, listAdapters } from './registry';
 import type { AdapterContext, AgentConfig, Executable } from './types';
@@ -120,10 +121,11 @@ describe('CodexAdapter', () => {
 });
 
 describe('registry', () => {
-  it('has Claude Code, Gemini CLI and Codex CLI, in that order', () => {
-    expect(listAdapters().map((a) => a.id)).toEqual(['claude', 'gemini', 'codex']);
+  it('has Claude Code, Gemini CLI, Codex CLI and Custom CLI, in that order', () => {
+    expect(listAdapters().map((a) => a.id)).toEqual(['claude', 'gemini', 'codex', 'custom']);
     expect(getAdapter('gemini')).toBeInstanceOf(GeminiAdapter);
     expect(getAdapter('codex')).toBeInstanceOf(CodexAdapter);
-    expect(getAdapter('custom')).toBeNull();
+    expect(getAdapter('custom')).toBeInstanceOf(CustomCliAdapter);
+    expect(getAdapter('other')).toBeNull();
   });
 });

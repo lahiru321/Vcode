@@ -5,10 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAgent } from '../agents/service';
 import { agentSessionEvents, type AgentSessionUpdate } from '../agents/sessions';
 import type { AppDatabase } from '../db';
-import { agents, agentSessions } from '../db/schema';
+import { getCredential, setCredential } from '../credentials/service';
+import { agents, agentSessions, credentials } from '../db/schema';
 import { createProject } from '../projects/service';
 import { PtyHostError } from '../pty-host/supervisor';
-import { tempDir, testDatabase } from '../testing';
+import { fakeSecretBox, tempDir, testDatabase } from '../testing';
 import {
   createTerminal,
   endActiveSessions,
@@ -38,6 +39,7 @@ function setup() {
       command: { file: '/bin/zsh', args: ['-l'], verbatimArguments: false },
     }),
     killProcessTree: vi.fn(async () => {}),
+    secrets: fakeSecretBox(),
     adapters: {
       platform: {
         resolveExecutable: async (command) =>
@@ -87,6 +89,55 @@ async function runningAgent() {
   });
   return { ...ctx, p, agent, terminal };
 }
+
+describe('createTerminal with an agent that has an API key (P4-05)', () => {
+  const SECRET = 'sk-ant-api03-test-secret-value';
+
+  it("puts the decrypted key in the agent's environment only", async () => {
+    const { db, deps, request } = setup();
+    const p = await project(db);
+    const key = setCredential(db, deps.secrets, {
+      name: 'Anthropic',
+      provider: 'claude',
+      envVar: 'ANTHROPIC_API_KEY',
+      secret: SECRET,
+    });
+    const agent = createAgent(db, { name: 'C', adapter: 'claude', credentialId: key.id });
+    const terminal = await createTerminal(deps, {
+      projectId: p.id,
+      agentId: agent.id,
+      cols: 80,
+      rows: 24,
+    });
+    expect(request).toHaveBeenCalledWith(
+      'spawn',
+      expect.objectContaining({ env: { PATH: '/usr/bin', ANTHROPIC_API_KEY: SECRET } }),
+    );
+    // Not in what goes back to the renderer.
+    expect(JSON.stringify(withAgents(db, [terminal]))).not.toContain(SECRET);
+  });
+
+  it("a key this computer can't decrypt stops the start and marks the key", async () => {
+    const { db, deps, request } = setup();
+    const p = await project(db);
+    // Saved by "another user": a box this one can't decrypt.
+    const key = setCredential(db, fakeSecretBox(), {
+      name: 'Anthropic',
+      provider: 'claude',
+      envVar: 'ANTHROPIC_API_KEY',
+      secret: SECRET,
+    });
+    db.update(credentials)
+      .set({ encryptedSecret: Buffer.from('opaque') })
+      .run();
+    const agent = createAgent(db, { name: 'C', adapter: 'claude', credentialId: key.id });
+    await expect(
+      createTerminal(deps, { projectId: p.id, agentId: agent.id, cols: 80, rows: 24 }),
+    ).rejects.toMatchObject({ code: 'UNAVAILABLE', message: /can't be decrypted/ });
+    expect(request).not.toHaveBeenCalledWith('spawn', expect.anything());
+    expect(getCredential(db, key.id).status).toBe('unavailable');
+  });
+});
 
 describe('createTerminal with an agent', () => {
   it("runs the agent's CLI in the project's main workspace", async () => {

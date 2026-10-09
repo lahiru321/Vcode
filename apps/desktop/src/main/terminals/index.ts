@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import { adapterContext } from '../agents/run';
+import { safeStorageBox } from '../credentials';
 import { agentSessionEvents } from '../agents/sessions';
 import { getDatabase } from '../db';
 import { broadcastEvent } from '../ipc/registry';
@@ -46,6 +47,7 @@ export function terminalDeps(): TerminalDeps {
     },
     killProcessTree: (pid) => platform.killProcessTree(pid),
     adapters: adapterContext,
+    secrets: safeStorageBox,
   };
 }
 

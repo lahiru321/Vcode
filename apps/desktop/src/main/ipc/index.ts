@@ -1,5 +1,6 @@
 import { registerAgentHandlers } from './agents';
 import { registerAppHandlers } from './app';
+import { registerCredentialHandlers } from './credentials';
 import { registerDialogHandlers } from './dialog';
 import { registerProjectHandlers } from './projects';
 import { assertAllChannelsHandled } from './registry';
@@ -12,6 +13,7 @@ export { broadcastEvent, sendEvent } from './registry';
 export function registerIpcHandlers(): void {
   registerAppHandlers();
   registerAgentHandlers();
+  registerCredentialHandlers();
   registerDialogHandlers();
   registerProjectHandlers();
   registerSettingsHandlers();

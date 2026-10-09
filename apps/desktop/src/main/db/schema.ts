@@ -74,6 +74,8 @@ export const credentials = sqliteTable(
     name: text('name').notNull(),
     provider: text('provider').notNull(),
     authType: text('auth_type', { enum: CREDENTIAL_AUTH_TYPES }).notNull(),
+    /** The environment variable the secret is put in when an agent using it starts. */
+    envVar: text('env_var').notNull().default(''),
     /** Encrypted with Electron safeStorage. Never leaves the main process. */
     encryptedSecret: blob('encrypted_secret', { mode: 'buffer' }).notNull(),
     status: text('status', { enum: CREDENTIAL_STATUSES }).notNull().default('active'),

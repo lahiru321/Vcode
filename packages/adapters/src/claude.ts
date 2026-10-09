@@ -11,6 +11,7 @@ export class ClaudeAdapter extends CliAdapter {
   readonly displayName = 'Claude Code';
   readonly defaultExecutable = 'claude';
   readonly supportsInstructions = true;
+  override readonly apiKeyEnv = 'ANTHROPIC_API_KEY';
 
   protected override launchArgs(config: AgentConfig): string[] {
     const args: string[] = [];

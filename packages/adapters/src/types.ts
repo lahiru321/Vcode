@@ -102,6 +102,10 @@ export interface AgentAdapter {
   readonly defaultExecutable: string;
   /** Whether the agent's role and instructions reach the CLI (the UI says when they don't). */
   readonly supportsInstructions: boolean;
+  /** Whether the agent's model setting reaches the CLI. */
+  readonly supportsModel: boolean;
+  /** The variable the CLI reads an API key from, if any (the default for a new key). */
+  readonly apiKeyEnv: string | null;
 
   /** Checks the CLI is installed and runs (e.g. its version command). */
   validate(config: AgentConfig, ctx: AdapterContext, env: Environment): Promise<ValidationResult>;

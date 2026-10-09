@@ -21,6 +21,7 @@ import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { AppDatabase } from '../db';
 import { agents, agentSessions } from '../db/schema';
 import type { Environment } from '../platform';
+import { getCredential } from '../credentials/service';
 import { getProject } from '../projects/service';
 
 // Agents (V1 doc §12, §14, §18 "agents"): a configured CLI that terminals can run. The adapter
@@ -36,7 +37,6 @@ export interface AgentDeps {
 }
 
 export function toAgent(row: AgentRow): Agent {
-  // credentialId comes with credentials (P4); the response schema would strip it anyway.
   const { argsJson, envJson, ...rest } = row;
   return { ...rest, args: argsJson, env: envJson };
 }
@@ -73,6 +73,8 @@ export function listProviders(): AgentProvider[] {
             displayName: adapter.displayName,
             defaultExecutable: adapter.defaultExecutable,
             supportsInstructions: adapter.supportsInstructions,
+            supportsModel: adapter.supportsModel,
+            apiKeyEnv: adapter.apiKeyEnv,
           },
         ]
       : [];
@@ -106,11 +108,23 @@ export function getAgent(db: AppDatabase, id: string): AgentRow {
 
 const blankToNull = (value: string | null | undefined): string | null => value?.trim() || null;
 
+/** The executable to save: the given one, else the adapter's default. Custom CLIs need one. */
+function executableFor(adapter: AgentAdapter, executable: string | undefined): string {
+  const value = executable?.trim() || adapter.defaultExecutable;
+  if (!value) {
+    throw new IpcError('INVALID_REQUEST', 'Enter the command to run.');
+  }
+  return value;
+}
+
 export function createAgent(db: AppDatabase, request: CreateAgentRequest): AgentRow {
   const adapter = adapterFor(request.adapter);
   const projectId = request.projectId ?? null;
   if (projectId) {
     getProject(db, projectId);
+  }
+  if (request.credentialId) {
+    getCredential(db, request.credentialId);
   }
   return db
     .insert(agents)
@@ -118,12 +132,13 @@ export function createAgent(db: AppDatabase, request: CreateAgentRequest): Agent
       projectId,
       name: request.name,
       adapter: request.adapter,
-      executable: request.executable?.trim() || adapter.defaultExecutable,
+      executable: executableFor(adapter, request.executable),
       argsJson: request.args ?? [],
       envJson: request.env ?? {},
       model: blankToNull(request.model),
       role: blankToNull(request.role),
       instructions: blankToNull(request.instructions),
+      credentialId: request.credentialId ?? null,
     })
     .returning()
     .get();
@@ -136,10 +151,11 @@ export function updateAgent(db: AppDatabase, request: UpdateAgentRequest): Agent
   if (request.projectId) {
     getProject(db, request.projectId);
   }
+  if (request.credentialId) {
+    getCredential(db, request.credentialId);
+  }
   const executable =
-    request.executable === undefined
-      ? undefined
-      : request.executable.trim() || adapter.defaultExecutable;
+    request.executable === undefined ? undefined : executableFor(adapter, request.executable);
   const text = (value: string | null | undefined) =>
     value === undefined ? undefined : blankToNull(value);
   return (
@@ -154,6 +170,7 @@ export function updateAgent(db: AppDatabase, request: UpdateAgentRequest): Agent
         model: text(request.model),
         role: text(request.role),
         instructions: text(request.instructions),
+        credentialId: request.credentialId,
         // A different CLI hasn't been checked yet.
         ...(executable !== undefined && executable !== row.executable
           ? { status: 'unvalidated' as const }

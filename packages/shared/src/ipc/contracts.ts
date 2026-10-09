@@ -3,6 +3,7 @@ import {
   AGENT_ADAPTERS,
   AGENT_SESSION_STATUSES,
   AGENT_STATUSES,
+  CREDENTIAL_STATUSES,
   PROJECT_STATUSES,
   SESSION_STATUSES,
 } from '../domain';
@@ -74,7 +75,8 @@ export const UpdateProjectRequest = z
 export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequest>;
 
 // Agents (V1 doc §12, §14, §20): a configured CLI, global (`projectId: null`) or for one project.
-// `env` holds plain variables only; secrets are credentials (P4) and never come back here.
+// `env` holds plain variables only; an API key is a credential (`credentialId`), whose secret
+// never comes back here.
 
 const AgentName = z.string().trim().min(1, 'Name is required').max(100, 'Name is too long');
 const EnvName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Not a valid variable name');
@@ -90,6 +92,8 @@ export const Agent = z.object({
   model: z.string().nullable(),
   role: z.string().nullable(),
   instructions: z.string().nullable(),
+  /** The API key put in the agent's environment when it starts; null = the CLI's own login. */
+  credentialId: Id.nullable(),
   status: z.enum(AGENT_STATUSES),
   createdAt: Timestamp,
   updatedAt: Timestamp,
@@ -113,6 +117,7 @@ export const CreateAgentRequest = z.strictObject({
   model: OptionalText(200),
   role: OptionalText(200),
   instructions: OptionalText(20_000),
+  credentialId: Id.nullable().optional(),
 });
 export type CreateAgentRequest = z.infer<typeof CreateAgentRequest>;
 
@@ -143,10 +148,15 @@ export type AgentValidation = z.infer<typeof AgentValidation>;
 export const AgentProvider = z.object({
   id: z.enum(AGENT_ADAPTERS),
   displayName: z.string(),
-  /** Looked up on PATH when the agent has no executable of its own, e.g. "claude". */
+  /** Looked up on PATH when the agent has no executable of its own, e.g. "claude". Empty: the
+   * agent must name its executable (custom CLIs). */
   defaultExecutable: z.string(),
   /** Whether the agent's role and instructions reach the CLI. */
   supportsInstructions: z.boolean(),
+  /** Whether the agent's model reaches the CLI. */
+  supportsModel: z.boolean(),
+  /** The variable the CLI reads an API key from, if any: the default for a new key. */
+  apiKeyEnv: z.string().nullable(),
 });
 export type AgentProvider = z.infer<typeof AgentProvider>;
 
@@ -166,6 +176,47 @@ export const AgentDetection = z.object({
   message: z.string().nullable(),
 });
 export type AgentDetection = z.infer<typeof AgentDetection>;
+
+// Credentials (V1 doc §16, §20): API keys for CLIs that read one from an environment variable.
+// The secret is encrypted in main (safeStorage) and only goes the other way: the renderer can
+// set it, never read it. Responses carry metadata only.
+
+export const Credential = z.object({
+  id: Id,
+  name: z.string(),
+  /** The provider it is meant for; the Add / Edit Agent dialog offers it for that provider. */
+  provider: z.enum(AGENT_ADAPTERS),
+  /** The variable the secret is put in, e.g. ANTHROPIC_API_KEY. */
+  envVar: z.string(),
+  /** `unavailable`: this computer can no longer decrypt it (e.g. another OS user saved it). */
+  status: z.enum(CREDENTIAL_STATUSES),
+  /** How many agents use it. */
+  agentCount: z.number().int().nonnegative(),
+  createdAt: Timestamp,
+  updatedAt: Timestamp,
+});
+export type Credential = z.infer<typeof Credential>;
+
+/**
+ * Creates a credential (no `id`; `secret` required) or changes one (`id`; a new `secret`
+ * replaces the old one, none keeps it).
+ */
+export const SetCredentialRequest = z.strictObject({
+  id: Id.optional(),
+  name: z.string().trim().min(1, 'Name is required').max(100, 'Name is too long'),
+  provider: z.enum(AGENT_ADAPTERS),
+  envVar: EnvName,
+  secret: z
+    .string()
+    .trim()
+    .min(1, 'Enter the key')
+    .max(16_384, 'The key is too long')
+    .refine((value) => !/[\r\n]/.test(value), 'The key must be on one line')
+    .optional(),
+});
+export type SetCredentialRequest = z.infer<typeof SetCredentialRequest>;
+
+export const CredentialIdRequest = z.strictObject({ id: Id });
 
 // Terminals (V1 doc §11, §20). A terminal runs in a workspace; without `workspaceId` the
 // project's `main` workspace (its root folder) is used. Terminal data does not go through
@@ -272,6 +323,12 @@ export const invokeContracts = {
   'agents:providers': { request: NoPayload, response: z.array(AgentProvider) },
   /** Runs a provider's version check without saving anything. */
   'agents:detect': { request: DetectAgentRequest, response: AgentDetection },
+  /** Metadata only: secrets never leave main. */
+  'credentials:list': { request: NoPayload, response: z.array(Credential) },
+  /** CONFLICT if the name is taken; UNAVAILABLE if this computer can't encrypt. */
+  'credentials:set': { request: SetCredentialRequest, response: Credential },
+  /** Agents that used it go back to the CLI's own login. */
+  'credentials:delete': { request: CredentialIdRequest, response: z.object({ id: Id }) },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
   'terminals:attach': {
