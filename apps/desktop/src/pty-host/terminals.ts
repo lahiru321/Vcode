@@ -6,6 +6,7 @@ import {
   type TerminalHostMessage,
 } from '@vcode/shared/terminal-port';
 import type { IPty, IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
+import { ActivityTracker, type ActivitySignal } from './activity';
 import { ScreenMirror } from './mirror';
 import type { SpawnParams } from './protocol';
 
@@ -48,6 +49,8 @@ interface Terminal {
   unacked: number;
   /** Whether the process is paused because the renderer is behind. */
   paused: boolean;
+  /** For terminals spawned with `trackActivity`. */
+  activity?: ActivityTracker;
 }
 
 export class TerminalManager {
@@ -56,13 +59,16 @@ export class TerminalManager {
   constructor(
     private readonly spawnPty: SpawnPty,
     private readonly onExit: (exit: TerminalExit) => void,
+    private readonly onActivity: (sessionId: string, signal: ActivitySignal) => void = () => {},
   ) {}
 
   get size(): number {
     return this.terminals.size;
   }
 
-  spawn({ sessionId, file, args, cwd, env, cols, rows }: SpawnParams): { pid: number } {
+  spawn({ sessionId, file, args, cwd, env, cols, rows, trackActivity }: SpawnParams): {
+    pid: number;
+  } {
     if (this.terminals.has(sessionId)) {
       throw new Error(`Terminal ${sessionId} already exists`);
     }
@@ -82,9 +88,15 @@ export class TerminalManager {
       paused: false,
     };
     this.terminals.set(sessionId, terminal);
+    if (trackActivity) {
+      const activity = new ActivityTracker((signal) => this.onActivity(sessionId, signal));
+      terminal.activity = activity;
+      terminal.mirror.onBell(() => activity.bell());
+    }
 
     pty.onData((data) => {
       terminal.mirror.write(data);
+      terminal.activity?.output();
       if (!terminal.port) {
         return;
       }
@@ -94,6 +106,7 @@ export class TerminalManager {
     });
     pty.onExit(({ exitCode, signal }) => {
       this.terminals.delete(sessionId);
+      terminal.activity?.dispose();
       // node-pty reports signal 0 when there was none.
       const exit = { sessionId, exitCode, signal: signal ? signal : null };
       const tellRenderer = (): void => {
@@ -135,6 +148,7 @@ export class TerminalManager {
       }
       switch (message.type) {
         case 'input':
+          terminal.activity?.input();
           terminal.pty.write(message.data);
           break;
         case 'resize':
@@ -177,7 +191,9 @@ export class TerminalManager {
   }
 
   write(sessionId: string, data: string): void {
-    this.get(sessionId).pty.write(data);
+    const terminal = this.get(sessionId);
+    terminal.activity?.input();
+    terminal.pty.write(data);
   }
 
   resize(sessionId: string, cols: number, rows: number): void {

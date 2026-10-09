@@ -18,6 +18,8 @@ export interface SpawnParams {
   env: Record<string, string>;
   cols: number;
   rows: number;
+  /** Report output / idle / bell signals for this terminal (agents; see ./activity). */
+  trackActivity?: boolean;
 }
 
 export interface SessionParams {
@@ -72,6 +74,11 @@ export const HostToMain = z.union([
     exitCode: z.number().int(),
     /** POSIX signal number, if the process was ended by one. */
     signal: z.number().int().nullable(),
+  }),
+  z.object({
+    kind: z.literal('activity'),
+    sessionId: z.string(),
+    signal: z.enum(['output', 'idle', 'bell']),
   }),
   z.object({
     kind: z.literal('log'),

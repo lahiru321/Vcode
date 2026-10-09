@@ -20,6 +20,11 @@ export class ScreenMirror {
     this.terminal.loadAddon(this.serializer);
   }
 
+  /** Called when the output rings the bell (BEL outside an escape sequence). */
+  onBell(listener: () => void): void {
+    this.terminal.onBell(listener);
+  }
+
   write(data: string): void {
     this.terminal.write(data);
   }

@@ -67,6 +67,13 @@ interface SupervisorEvents {
   failed: [];
   /** A terminal's process ended. */
   terminalExit: [exit: TerminalExit];
+  /** Output / idle / bell of a terminal spawned with `trackActivity`. */
+  terminalActivity: [activity: TerminalActivity];
+}
+
+export interface TerminalActivity {
+  sessionId: string;
+  signal: 'output' | 'idle' | 'bell';
 }
 
 /**
@@ -265,6 +272,9 @@ export class PtyHostSupervisor extends EventEmitter<SupervisorEvents> {
           exitCode: message.exitCode,
           signal: message.signal,
         });
+        break;
+      case 'activity':
+        this.emit('terminalActivity', { sessionId: message.sessionId, signal: message.signal });
         break;
       case 'log':
         this.log[message.level](message.data ?? {}, message.msg);

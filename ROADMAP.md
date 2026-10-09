@@ -34,9 +34,8 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P3 — First CLI Agent
 
 **Next up:**
-1. `P3-06` Best-effort READY / WORKING / WAITING detection
-2. `P3-07` "Start Claude Code" button + status badge
-3. Check P3 **Done when** by hand
+1. `P3-07` "Start Claude Code" button + status badge
+2. Check P3 **Done when** by hand
 
 ---
 
@@ -168,7 +167,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-09:* Agents start through `terminals:create { …, agentId }` (V1 doc §15 "select a configured agent, or Plain Shell"), so they get everything terminals have (attach, screen restore, stop/restart/close, orphan cleanup). The agent must be global or the project's own (else `NOT_FOUND`); it runs in the requested workspace, by default `main`. The adapter builds the environment (terminal env + agent env) and the command; a missing CLI → `NOT_FOUND` with the adapter's message, the agent's status set to `not_found`, nothing started. The terminal's `shell` column holds the file actually spawned (e.g. `claude.exe`, or `cmd.exe` for a shim), so P2-09's name check works for agents too; title = agent name. `adapter.start()` runs after the spawn with a handle (`write` → host `write`, `killTree` → `terminals:stop`). `adapter.stop()` isn't called yet: `terminals:stop` already ends the tree, which is what every adapter does today.
 - [x] **P3-05** · `agent_sessions` lifecycle + status (`CREATED → STARTING → READY → … → STOPPED / FAILED`) · `M`
   - *2026-10-09:* `AGENT_SESSION_STATUSES` (`created` / `starting` / `ready` / `working` / `waiting` / `stopped` / `failed` / `completed`) in `shared/domain.ts`; migration `0001_agent_session_statuses` (default `created`). `src/main/agents/sessions.ts`: the agent session row is created with its terminal (one transaction, `terminal_sessions.agent_session_id`) → `starting` → follows the terminal's end: exit 0 → `completed`, other exit → `failed`, stopped (user or quit) → `stopped`, host crash → `failed`, left over from an earlier run → `failed` at launch. Ended sessions never change again; each change is emitted and forwarded to every window as the **`agent:status`** event `{ agentSessionId, agentId, status }`, and `adapter.cleanup()` runs once it ends. Restarting an agent terminal starts the same agent again as a new session. Terminal responses now carry `agent: { sessionId, agentId, name, adapter, status } | null`. READY / WORKING / WAITING come with P3-06.
-- [ ] **P3-06** · Best-effort `READY` / `WORKING` / `WAITING` detection (output idle timeout, terminal bell) · `M`
+- [x] **P3-06** · Best-effort `READY` / `WORKING` / `WAITING` detection (output idle timeout, terminal bell) · `M`
+  - *2026-10-09:* PTY host `ActivityTracker` (`src/pty-host/activity.ts`) for terminals spawned with `trackActivity` (agents only): start-up counts as busy; output after a quiet spell → `output`; **1.5 s** without output → `idle` (also when the CLI prints nothing at start); output within **150 ms** of input is the echo of typing and ignored; the bell comes from the screen mirror's parser (`onBell`, so the BEL that ends an OSC sequence doesn't count), at most once a second. Only changes are sent (new host → main message `activity`, supervisor event `terminalActivity`). Main asks the agent's adapter (`getStatus(current, signal)`, default rules in P3-01) and records the new status, which goes out as `agent:status`; ended sessions ignore signals. Checked with the real Claude Code 2.1.294: its start-up screen settles after ~2 s (→ `ready`) and stays quiet while waiting.
 - [ ] **P3-07** · "Start Claude Code" button per project + status badge · `S`
 
 **Done when:**

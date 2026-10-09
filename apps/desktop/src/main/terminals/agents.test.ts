@@ -14,6 +14,7 @@ import {
   endActiveSessions,
   failStaleSessions,
   getTerminal,
+  recordTerminalActivity,
   recordTerminalExit,
   restartTerminal,
   stopTerminal,
@@ -99,6 +100,7 @@ describe('createTerminal with an agent', () => {
       env: { PATH: '/usr/bin' },
       cols: 100,
       rows: 30,
+      trackActivity: true,
     });
     expect(terminal).toMatchObject({
       title: 'Claude Code',
@@ -230,5 +232,39 @@ describe('agent session lifecycle', () => {
     const shell = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
     expect(shell.agentSessionId).toBeNull();
     expect(withAgents(db, [shell])[0]!.agent).toBeNull();
+  });
+});
+
+describe('activity detection (P3-06)', () => {
+  it('turns terminal signals into ready / working / waiting', async () => {
+    const { db, terminal, updates } = await runningAgent();
+    const signal = (s: 'output' | 'idle' | 'bell') =>
+      recordTerminalActivity(db, { sessionId: terminal.id, signal: s });
+    signal('idle');
+    signal('output');
+    signal('output');
+    signal('idle');
+    signal('bell');
+    signal('output');
+    expect(updates.map((update) => update.status)).toEqual([
+      'starting',
+      'ready',
+      'working',
+      'waiting',
+      'working',
+    ]);
+    expect(agentSession(db, terminal.agentSessionId!)!.status).toBe('working');
+  });
+
+  it('ignores signals once the agent has ended, and plain shells', async () => {
+    const { db, deps, p, terminal, updates } = await runningAgent();
+    recordTerminalExit(db, { sessionId: terminal.id, exitCode: 0, signal: null });
+    recordTerminalActivity(db, { sessionId: terminal.id, signal: 'idle' });
+    expect(agentSession(db, terminal.agentSessionId!)!.status).toBe('completed');
+
+    const shell = await createTerminal(deps, { projectId: p.id, cols: 80, rows: 24 });
+    recordTerminalActivity(db, { sessionId: shell.id, signal: 'idle' });
+    recordTerminalActivity(db, { sessionId: MISSING_ID, signal: 'idle' });
+    expect(updates.map((update) => update.status)).toEqual(['starting', 'completed']);
   });
 });

@@ -5,6 +5,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { adapterFor, agentConfig, getAgent } from '../agents/service';
 import {
   agentEndStatus,
+  applyTerminalSignal,
   createAgentSession,
   failStaleAgentSessions,
   getAgentSession,
@@ -18,7 +19,12 @@ import { resolveExistingFolder } from '../fs/folders';
 import { createLogger } from '../logging';
 import type { Command, Environment } from '../platform';
 import { getProject, type ProjectRow } from '../projects/service';
-import { PtyHostError, type PtyHostSupervisor, type TerminalExit } from '../pty-host/supervisor';
+import {
+  PtyHostError,
+  type PtyHostSupervisor,
+  type TerminalActivity,
+  type TerminalExit,
+} from '../pty-host/supervisor';
 import { ensureMainWorkspace, getWorkspace } from '../workspaces/service';
 
 // Terminal sessions (V1 doc §11, §18 "terminal_sessions"). Main decides what to run and where,
@@ -110,6 +116,7 @@ export async function createTerminal(
       env,
       cols: request.cols,
       rows: request.rows,
+      trackActivity: agent !== null,
     }));
   } catch (error) {
     db.update(terminalSessions)
@@ -363,6 +370,18 @@ export function recordTerminalExit(
       agentEndStatus(status, exit.exitCode),
       exit.exitCode,
     );
+  }
+}
+
+/** Updates the agent a terminal runs from its activity (P3-06). Plain shells are ignored. */
+export function recordTerminalActivity(db: AppDatabase, activity: TerminalActivity): void {
+  const terminal = db
+    .select({ agentSessionId: terminalSessions.agentSessionId })
+    .from(terminalSessions)
+    .where(eq(terminalSessions.id, activity.sessionId))
+    .get();
+  if (terminal?.agentSessionId) {
+    applyTerminalSignal(db, terminal.agentSessionId, activity.signal);
   }
 }
 

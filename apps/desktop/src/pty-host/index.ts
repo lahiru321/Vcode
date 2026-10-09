@@ -26,7 +26,11 @@ type Handlers = {
   ) => HostMethods[M]['result'] | Promise<HostMethods[M]['result']>;
 };
 
-const terminals = new TerminalManager(spawn, (exit) => send({ kind: 'exit', ...exit }));
+const terminals = new TerminalManager(
+  spawn,
+  (exit) => send({ kind: 'exit', ...exit }),
+  (sessionId, signal) => send({ kind: 'activity', sessionId, signal }),
+);
 
 const handlers: Handlers = {
   ping: () => ({ pid: process.pid, uptimeMs: Date.now() - startedAt }),

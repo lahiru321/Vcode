@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { getAdapter } from '@vcode/adapters';
+import { getAdapter, type AgentActivity, type TerminalSignal } from '@vcode/adapters';
 import {
   ACTIVE_AGENT_SESSION_STATUSES,
   type AgentAdapter as AdapterId,
@@ -67,6 +67,47 @@ export function setAgentSessionStatus(
     cleanup(db, row);
   }
   return true;
+}
+
+/**
+ * READY / WORKING / WAITING, best-effort (V1 doc §13): the agent's adapter reads a terminal
+ * signal from the PTY host (./pty-host/activity) given the current status. Returns the new
+ * status, or null if nothing changed.
+ */
+export function applyTerminalSignal(
+  db: AppDatabase,
+  agentSessionId: string,
+  signal: TerminalSignal,
+): AgentSessionStatus | null {
+  const row = db
+    .select({ status: agentSessions.status, adapter: agents.adapter })
+    .from(agentSessions)
+    .innerJoin(agents, eq(agentSessions.agentId, agents.id))
+    .where(eq(agentSessions.id, agentSessionId))
+    .get();
+  const adapter = row ? getAdapter(row.adapter) : null;
+  if (!row || !adapter) {
+    return null;
+  }
+  let current: AgentActivity | 'starting';
+  switch (row.status) {
+    case 'created':
+    case 'starting':
+      current = 'starting';
+      break;
+    case 'ready':
+    case 'working':
+    case 'waiting':
+      current = row.status;
+      break;
+    default:
+      return null; // ended
+  }
+  const next = adapter.getStatus(current, signal);
+  if (!next || next === current) {
+    return null;
+  }
+  return setAgentSessionStatus(db, agentSessionId, next) ? next : null;
 }
 
 /** An agent session's end, from how its terminal ended. */

@@ -96,6 +96,7 @@ describe('createTerminal', () => {
       env: { PATH: '/usr/bin' },
       cols: 80,
       rows: 24,
+      trackActivity: false,
     });
 
     const [workspace] = db.select().from(workspaces).all();

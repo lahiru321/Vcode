@@ -11,6 +11,7 @@ import { killLeftovers } from './orphans';
 import {
   endActiveSessions,
   failStaleSessions,
+  recordTerminalActivity,
   recordTerminalExit,
   type TerminalDeps,
 } from './service';
@@ -70,6 +71,7 @@ export function trackTerminalSessions(): void {
     // While the host shuts down, it is the one closing the terminals.
     recordTerminalExit(getDatabase(), exit, ptyHost.state === 'stopping' ? 'stopped' : 'exited'),
   );
+  ptyHost.on('terminalActivity', (activity) => recordTerminalActivity(getDatabase(), activity));
   ptyHost.on('exit', ({ expected }) => {
     const pids = endActiveSessions(getDatabase(), expected ? 'stopped' : 'failed');
     // A crashed host leaves its shells running; so can a slow shutdown.
