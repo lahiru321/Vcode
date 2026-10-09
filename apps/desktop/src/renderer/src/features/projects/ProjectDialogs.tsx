@@ -1,6 +1,6 @@
 import type { CreateProjectRequest, Project } from '@vcode/shared';
 import { FolderOpen, GitBranch } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,42 +22,13 @@ import {
 } from '@renderer/components/ui/dialog';
 import { Input } from '@renderer/components/ui/input';
 import { Label } from '@renderer/components/ui/label';
+import { FormError, useSubmit } from '@renderer/lib/form';
 
 const MAX_NAME_LENGTH = 100;
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** Last segment of a Windows or POSIX path. */
 function folderName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
-/** A submit handler that tracks pending state and shows the IPC error message, if any. */
-function useSubmit(action: () => Promise<void>) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const submit = async (event?: FormEvent) => {
-    event?.preventDefault();
-    setPending(true);
-    setError(null);
-    try {
-      await action();
-    } catch (err) {
-      setError(errorMessage(err));
-      setPending(false);
-    }
-  };
-  return { pending, error, submit };
-}
-
-function FormError({ message }: { message: string | null }) {
-  return message ? (
-    <p role="alert" className="text-sm text-destructive">
-      {message}
-    </p>
-  ) : null;
 }
 
 function NameField({ value, onChange }: { value: string; onChange: (value: string) => void }) {

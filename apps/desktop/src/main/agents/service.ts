@@ -1,13 +1,25 @@
 import {
   getAdapter,
+  listAdapters,
   type AdapterContext,
   type AgentAdapter,
   type AgentConfig,
 } from '@vcode/adapters';
-import { IpcError, type Agent, type AgentValidation, type CreateAgentRequest } from '@vcode/shared';
-import { eq, isNull, or, sql } from 'drizzle-orm';
+import {
+  AGENT_ADAPTERS,
+  IpcError,
+  type Agent,
+  type AgentDetection,
+  type AgentProvider,
+  type AgentValidation,
+  ACTIVE_AGENT_SESSION_STATUSES,
+  type CreateAgentRequest,
+  type DetectAgentRequest,
+  type UpdateAgentRequest,
+} from '@vcode/shared';
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { AppDatabase } from '../db';
-import { agents } from '../db/schema';
+import { agents, agentSessions } from '../db/schema';
 import type { Environment } from '../platform';
 import { getProject } from '../projects/service';
 
@@ -48,6 +60,23 @@ export function adapterFor(adapter: string): AgentAdapter {
     throw new IpcError('INVALID_REQUEST', `"${adapter}" agents aren't supported yet.`);
   }
   return found;
+}
+
+/** The providers the app has an adapter for. */
+export function listProviders(): AgentProvider[] {
+  return listAdapters().flatMap((adapter) => {
+    const id = AGENT_ADAPTERS.find((known) => known === adapter.id);
+    return id
+      ? [
+          {
+            id,
+            displayName: adapter.displayName,
+            defaultExecutable: adapter.defaultExecutable,
+            supportsInstructions: adapter.supportsInstructions,
+          },
+        ]
+      : [];
+  });
 }
 
 /** Global agents and, with `projectId`, that project's own; by name. */
@@ -100,16 +129,116 @@ export function createAgent(db: AppDatabase, request: CreateAgentRequest): Agent
     .get();
 }
 
+/** Changes the given fields. The agent's running sessions keep the settings they started with. */
+export function updateAgent(db: AppDatabase, request: UpdateAgentRequest): AgentRow {
+  const row = getAgent(db, request.id);
+  const adapter = adapterFor(row.adapter);
+  if (request.projectId) {
+    getProject(db, request.projectId);
+  }
+  const executable =
+    request.executable === undefined
+      ? undefined
+      : request.executable.trim() || adapter.defaultExecutable;
+  const text = (value: string | null | undefined) =>
+    value === undefined ? undefined : blankToNull(value);
+  return (
+    db
+      .update(agents)
+      .set({
+        projectId: request.projectId,
+        name: request.name,
+        executable,
+        argsJson: request.args,
+        envJson: request.env,
+        model: text(request.model),
+        role: text(request.role),
+        instructions: text(request.instructions),
+        // A different CLI hasn't been checked yet.
+        ...(executable !== undefined && executable !== row.executable
+          ? { status: 'unvalidated' as const }
+          : {}),
+      })
+      .where(eq(agents.id, row.id))
+      .returning()
+      .get() ?? getAgent(db, row.id)
+  );
+}
+
+/**
+ * Deletes the agent and its ended sessions (their terminals stay, as plain terminals).
+ * CONFLICT while one of its sessions may still be running.
+ */
+export function deleteAgent(db: AppDatabase, id: string): { id: string } {
+  const row = getAgent(db, id);
+  const running = db
+    .select({ id: agentSessions.id })
+    .from(agentSessions)
+    .where(
+      and(
+        eq(agentSessions.agentId, id),
+        inArray(agentSessions.status, [...ACTIVE_AGENT_SESSION_STATUSES]),
+      ),
+    )
+    .get();
+  if (running) {
+    throw new IpcError('CONFLICT', `“${row.name}” is running. Stop it before deleting it.`);
+  }
+  db.delete(agents).where(eq(agents.id, id)).run();
+  return { id };
+}
+
+/** Runs the adapter's check with the environment the agent would start with. */
+async function check(deps: AgentDeps, adapter: AgentAdapter, config: AgentConfig) {
+  const env = adapter.prepareEnvironment(config, await deps.environment());
+  return adapter.validate(config, deps.adapters, env);
+}
+
+/**
+ * Looks for a provider's CLI (the given executable, else its default) and runs its version
+ * check, without saving anything: the Add Agent dialog's auto-detect.
+ */
+export async function detectAgent(
+  deps: AgentDeps,
+  request: DetectAgentRequest,
+): Promise<AgentDetection> {
+  const adapter = adapterFor(request.adapter);
+  const result = await check(deps, adapter, {
+    name: adapter.displayName,
+    executable: request.executable?.trim() || adapter.defaultExecutable,
+    args: [],
+    env: {},
+    model: null,
+    role: null,
+    instructions: null,
+  });
+  switch (result.status) {
+    case 'ready':
+      return {
+        status: 'ready',
+        path: result.executable.path,
+        version: result.version,
+        message: null,
+      };
+    case 'not_found':
+      return { status: 'not_found', path: null, version: null, message: result.message };
+    case 'error':
+      return {
+        status: 'error',
+        path: result.executable?.path ?? null,
+        version: null,
+        message: result.message,
+      };
+  }
+}
+
 /** Checks the agent's CLI (its version command) and records the result as its status. */
 export async function validateAgent(
   deps: AgentDeps,
   id: string,
 ): Promise<{ agent: AgentRow; version: string | null; message: string | null }> {
   const row = getAgent(deps.db, id);
-  const adapter = adapterFor(row.adapter);
-  const config = agentConfig(row);
-  const env = adapter.prepareEnvironment(config, await deps.environment());
-  const result = await adapter.validate(config, deps.adapters, env);
+  const result = await check(deps, adapterFor(row.adapter), agentConfig(row));
   const agent =
     deps.db
       .update(agents)

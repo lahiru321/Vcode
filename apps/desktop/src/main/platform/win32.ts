@@ -123,6 +123,10 @@ function escapeCmdCommand(path: string): string {
 }
 
 function escapeCmdArgument(arg: string): string {
+  // cmd.exe ends the command at a line break, dropping the rest of the line (later arguments
+  // too), and no escape gets one through. Multi-line text (e.g. agent instructions) is passed
+  // on one line instead.
+  arg = arg.replace(/\r\n|\r|\n/g, ' ');
   // Standard argv quoting (CommandLineToArgvW / MSVCRT rules) first: backslashes before a
   // quote — or before the closing quote we add — are doubled, and quotes are backslash-escaped.
   const quoted = `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"`;

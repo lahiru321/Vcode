@@ -1,16 +1,22 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AdapterContext } from '@vcode/adapters';
-import { Agent, CreateAgentRequest, IpcError } from '@vcode/shared';
+import { Agent, CreateAgentRequest, IpcError, UpdateAgentRequest } from '@vcode/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppDatabase } from '../db';
 import { createProject, deleteProject } from '../projects/service';
+import { ensureMainWorkspace } from '../workspaces/service';
+import { createAgentSession, setAgentSessionStatus } from './sessions';
 import { tempDir, testDatabase } from '../testing';
 import {
   createAgent,
+  deleteAgent,
+  detectAgent,
   getAgent,
   listAgents,
+  listProviders,
   toAgent,
+  updateAgent,
   validateAgent,
   type AgentDeps,
 } from './service';
@@ -89,7 +95,7 @@ describe('createAgent', () => {
 
   it('refuses providers without an adapter and unknown projects', () => {
     const db = testDatabase();
-    expect(() => createAgent(db, { name: 'G', adapter: 'gemini' })).toThrow(IpcError);
+    expect(() => createAgent(db, { name: 'X', adapter: 'custom' })).toThrow(IpcError);
     expect(() => createAgent(db, { name: 'C', adapter: 'claude', projectId: MISSING_ID })).toThrow(
       /not found/i,
     );
@@ -103,6 +109,83 @@ describe('CreateAgentRequest', () => {
     expect(CreateAgentRequest.safeParse({ ...base, credentialId: MISSING_ID }).success).toBe(false);
     expect(CreateAgentRequest.safeParse({ ...base, name: '  ' }).success).toBe(false);
     expect(CreateAgentRequest.safeParse({ ...base, env: { A_1: 'x' } }).success).toBe(true);
+  });
+});
+
+describe('updateAgent', () => {
+  it('changes only the given fields; blank text becomes null', async () => {
+    const db = testDatabase();
+    const p = await project(db);
+    const agent = createAgent(db, {
+      name: 'C',
+      adapter: 'claude',
+      args: ['--a'],
+      model: 'opus',
+      role: 'Reviewer',
+    });
+    const updated = updateAgent(db, {
+      id: agent.id,
+      projectId: p.id,
+      name: 'Renamed',
+      model: ' ',
+      args: [],
+    });
+    expect(toAgent(updated)).toMatchObject({
+      projectId: p.id,
+      name: 'Renamed',
+      executable: 'claude',
+      args: [],
+      model: null,
+      role: 'Reviewer',
+    });
+    // Back to global.
+    expect(updateAgent(db, { id: agent.id, projectId: null }).projectId).toBeNull();
+  });
+
+  it('a new executable resets the status; the same one keeps it; blank = the default', () => {
+    const db = testDatabase();
+    const agent = createAgent(db, { name: 'C', adapter: 'claude', executable: 'D:\\claude.exe' });
+    db.$client.prepare("update agents set status = 'ready'").run();
+    expect(updateAgent(db, { id: agent.id, executable: 'D:\\claude.exe' }).status).toBe('ready');
+    const changed = updateAgent(db, { id: agent.id, executable: ' ' });
+    expect(changed).toMatchObject({ executable: 'claude', status: 'unvalidated' });
+  });
+
+  it('NOT_FOUND for an unknown agent or project', () => {
+    const db = testDatabase();
+    const agent = createAgent(db, { name: 'C', adapter: 'claude' });
+    expect(() => updateAgent(db, { id: MISSING_ID, name: 'x' })).toThrow(/not found/i);
+    expect(() => updateAgent(db, { id: agent.id, projectId: MISSING_ID })).toThrow(/not found/i);
+  });
+
+  it('the request needs a change and cannot switch provider', () => {
+    expect(UpdateAgentRequest.safeParse({ id: MISSING_ID }).success).toBe(false);
+    expect(UpdateAgentRequest.safeParse({ id: MISSING_ID, adapter: 'gemini' }).success).toBe(false);
+    expect(UpdateAgentRequest.safeParse({ id: MISSING_ID, model: null }).success).toBe(true);
+  });
+});
+
+describe('deleteAgent', () => {
+  it('deletes an agent and its ended sessions', async () => {
+    const db = testDatabase();
+    const p = await project(db);
+    const agent = createAgent(db, { name: 'C', adapter: 'claude' });
+    const session = createAgentSession(db, agent.id, ensureMainWorkspace(db, p).id);
+    setAgentSessionStatus(db, session.id, 'completed');
+    expect(deleteAgent(db, agent.id)).toEqual({ id: agent.id });
+    expect(listAgents(db)).toEqual([]);
+    expect(db.$client.prepare('select count(*) as n from agent_sessions').get()).toEqual({ n: 0 });
+    expect(() => deleteAgent(db, agent.id)).toThrow(/not found/i);
+  });
+
+  it('CONFLICT while the agent is running', async () => {
+    const db = testDatabase();
+    const p = await project(db);
+    const agent = createAgent(db, { name: 'C', adapter: 'claude' });
+    const session = createAgentSession(db, agent.id, ensureMainWorkspace(db, p).id);
+    setAgentSessionStatus(db, session.id, 'working');
+    expect(() => deleteAgent(db, agent.id)).toThrow(expect.objectContaining({ code: 'CONFLICT' }));
+    expect(getAgent(db, agent.id).id).toBe(agent.id);
   });
 });
 
@@ -170,5 +253,108 @@ describe('validateAgent', () => {
 
   it('NOT_FOUND for an unknown agent', async () => {
     await expect(validateAgent(deps(testDatabase()), MISSING_ID)).rejects.toThrow(/not found/i);
+  });
+});
+
+describe('listProviders', () => {
+  it('lists the providers that have an adapter', () => {
+    expect(listProviders()).toEqual([
+      {
+        id: 'claude',
+        displayName: 'Claude Code',
+        defaultExecutable: 'claude',
+        supportsInstructions: true,
+      },
+      {
+        id: 'gemini',
+        displayName: 'Gemini CLI',
+        defaultExecutable: 'gemini',
+        supportsInstructions: false,
+      },
+      {
+        id: 'codex',
+        displayName: 'Codex CLI',
+        defaultExecutable: 'codex',
+        supportsInstructions: true,
+      },
+    ]);
+  });
+});
+
+describe('detectAgent', () => {
+  it("finds the provider's default CLI and returns its path and version", async () => {
+    const db = testDatabase();
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: '2.1.0 (Claude Code)',
+      stderr: '',
+      timedOut: false,
+    }));
+    await expect(detectAgent(deps(db, { run }), { adapter: 'claude' })).resolves.toEqual({
+      status: 'ready',
+      path: '/bin/claude',
+      version: '2.1.0',
+      message: null,
+    });
+    // The adapter's environment: Claude's nesting variable is dropped.
+    expect(run).toHaveBeenCalledWith(expect.anything(), {
+      env: { PATH: '/bin' },
+      timeoutMs: expect.any(Number),
+    });
+    // Nothing is saved.
+    expect(listAgents(db)).toEqual([]);
+  });
+
+  it('uses the given executable; blank means the default', async () => {
+    const resolveExecutable = vi.fn(async (command: string) => ({
+      path: command,
+      kind: 'binary' as const,
+    }));
+    const d = deps(testDatabase(), {
+      platform: {
+        resolveExecutable,
+        buildCommand: (executable, args) => ({
+          file: executable.path,
+          args,
+          verbatimArguments: false,
+        }),
+      },
+    });
+    await detectAgent(d, { adapter: 'claude', executable: ' D:\\tools\\claude.exe ' });
+    await detectAgent(d, { adapter: 'claude', executable: '  ' });
+    expect(resolveExecutable.mock.calls.map(([command]) => command)).toEqual([
+      'D:\\tools\\claude.exe',
+      'claude',
+    ]);
+  });
+
+  it('reports a missing CLI and a failing one', async () => {
+    const db = testDatabase();
+    const missing = await detectAgent(
+      deps(db, {
+        platform: {
+          resolveExecutable: async () => null,
+          buildCommand: () => {
+            throw new Error('unused');
+          },
+        },
+      }),
+      { adapter: 'claude' },
+    );
+    expect(missing).toMatchObject({ status: 'not_found', path: null, message: /not found/ });
+
+    const failing = await detectAgent(
+      deps(db, {
+        run: async () => ({ exitCode: 1, stdout: '', stderr: 'boom', timedOut: false }),
+      }),
+      { adapter: 'claude' },
+    );
+    expect(failing).toMatchObject({ status: 'error', path: '/bin/claude', message: /boom/ });
+  });
+
+  it('refuses providers without an adapter', async () => {
+    await expect(detectAgent(deps(testDatabase()), { adapter: 'custom' })).rejects.toThrow(
+      IpcError,
+    );
   });
 });

@@ -16,6 +16,8 @@ export interface ProjectTerminals {
   create: () => Promise<void>;
   /** Opens a terminal running Claude Code (P3-07). */
   startClaude: () => Promise<void>;
+  /** Opens a terminal running `agent` (global, or one of this project's). */
+  startAgent: (agent: Agent) => Promise<void>;
   /** Ends the terminal's process tree; the tab stays, marked as stopped. */
   stop: (id: string) => Promise<void>;
   /** Replaces the terminal's tab with a new terminal in the same place. */
@@ -31,7 +33,7 @@ function errorMessage(error: unknown): string {
 
 /**
  * The agent the "Start Claude Code" button runs: the project's own Claude agent, else a global
- * one, else a new global "Claude Code" agent with the defaults (the agents manager is P4).
+ * one, else a new global "Claude Code" agent with the defaults.
  */
 async function claudeAgent(projectId: string): Promise<Agent> {
   const agents = (await invoke('agents:list', { projectId })).filter((a) => a.adapter === 'claude');
@@ -98,20 +100,36 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     }
   }, [project.id, open]);
 
-  const startClaude = useCallback(async () => {
-    try {
-      const agent = await claudeAgent(project.id);
+  const launch = useCallback(
+    async (agent: Agent) =>
       open(
         await invoke('terminals:create', {
           projectId: project.id,
           agentId: agent.id,
           ...INITIAL_SIZE,
         }),
-      );
+      ),
+    [project.id, open],
+  );
+
+  const startClaude = useCallback(async () => {
+    try {
+      await launch(await claudeAgent(project.id));
     } catch (error) {
       toast.error('Could not start Claude Code', { description: errorMessage(error) });
     }
-  }, [project.id, open]);
+  }, [project.id, launch]);
+
+  const startAgent = useCallback(
+    async (agent: Agent) => {
+      try {
+        await launch(agent);
+      } catch (error) {
+        toast.error(`Could not start “${agent.name}”`, { description: errorMessage(error) });
+      }
+    },
+    [launch],
+  );
 
   const stop = useCallback(
     async (id: string) => {
@@ -172,6 +190,7 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     activate: setActiveId,
     create,
     startClaude,
+    startAgent,
     stop,
     restart,
     close,

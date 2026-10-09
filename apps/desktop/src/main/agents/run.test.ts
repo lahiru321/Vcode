@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ClaudeAdapter } from '@vcode/adapters';
+import { ClaudeAdapter, CodexAdapter } from '@vcode/adapters';
 import { describe, expect, it } from 'vitest';
 import { platform, toEnvironment } from '../platform';
 import { tempDir } from '../testing';
@@ -74,5 +74,39 @@ describe('ClaudeAdapter with the real platform layer', () => {
       env,
     );
     expect(result).toMatchObject({ status: 'ready', version: '2.1.99' });
+  });
+});
+
+describe('CodexAdapter with the real platform layer', () => {
+  it('multi-line instructions with quotes reach the CLI intact through a shim', async () => {
+    const dir = tempDir();
+    const script = join(dir, 'fake-codex.js');
+    writeFileSync(script, 'console.log(JSON.stringify(process.argv.slice(2)))');
+    let executable: string;
+    if (platform.name === 'win32') {
+      executable = join(dir, 'codex.cmd');
+      writeFileSync(executable, `@"${process.execPath}" "${script}" %*\r\n`);
+    } else {
+      executable = join(dir, 'codex');
+      writeFileSync(executable, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`, {
+        mode: 0o755,
+      });
+    }
+    const instructions = 'Say "done" & stop at 100%.\nSecond line <b>.';
+    const command = await new CodexAdapter().buildCommand(
+      { name: 'Codex', executable, args: [], env: {}, model: null, role: null, instructions },
+      adapterContext,
+      { env, cwd: dir },
+    );
+    const result = await runCommand(command, { env, timeoutMs: 15_000 });
+    const argv = JSON.parse(result.stdout) as string[];
+    expect(argv[0]).toBe('-c');
+    const [key, value] = [
+      argv[1].slice(0, argv[1].indexOf('=')),
+      argv[1].slice(argv[1].indexOf('=') + 1),
+    ];
+    expect(key).toBe('developer_instructions');
+    // The value is a TOML basic string (a JSON string is one); line breaks survive escaped.
+    expect(JSON.parse(value)).toBe(instructions);
   });
 });

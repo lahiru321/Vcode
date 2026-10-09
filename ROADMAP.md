@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P4 — Agent Registry
 
 **Next up:**
-1. `P4-01` Add Agent dialog
-2. `P4-02` Agents manager UI (list, edit, delete, validate)
-3. `P4-03` `GeminiAdapter` + `CodexAdapter`
+1. `P4-04` `CustomCLIAdapter`
+2. `P4-05` Credentials (encrypted with `safeStorage`)
+3. `P4-06` Redact secrets from logs
 
 ---
 
@@ -47,7 +47,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P1 | Foundation | App opens, projects persist, CI green on Windows + macOS | L | Done |
 | P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | Done |
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
-| P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | To do |
+| P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | In progress |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | To do |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | To do |
 | P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | To do |
@@ -187,9 +187,12 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 **Goal:** configure any supported CLI; store API keys safely.
 **Depends on:** P3.
 
-- [ ] **P4-01** · Add Agent dialog: provider, name, global or project scope, executable auto-detect + override, args, model, role / instructions · `M`
-- [ ] **P4-02** · Agents manager UI: list, edit, delete, validate · `M`
-- [ ] **P4-03** · `GeminiAdapter` + `CodexAdapter` · `M`
+- [x] **P4-01** · Add Agent dialog: provider, name, global or project scope, executable auto-detect + override, args, model, role / instructions · `M`
+  - *2026-10-09:* Two new channels. **`agents:providers`** lists the adapters in the registry (`listAdapters()`: id, display name, default executable); the dialog's provider list comes only from it, so a new adapter shows up with no UI change. **`agents:detect { adapter, executable? }`** runs the adapter's version check with the agent's environment and saves nothing → `{ status: ready / not_found / error, path, version, message }` (shares the check with `agents:validate`). Dialog (`features/agents/AgentDialog.tsx` since P4-02, opened by the sidebar's Agents **+**): provider, name (follows the provider until edited), **All projects** / **Only "<project>"** (only for an active selected project), executable (blank = the default on PATH; detected on open, on provider change, when the field loses focus with a new value, and with **Detect**; shows the path + version or the adapter's message — a missing CLI doesn't block saving), model, role, instructions, extra arguments (one per line). After saving, `agents:validate` records the CLI status. `AgentsProvider` holds the global + selected project's agents; the sidebar now lists them (name, "project" tag, status dot) — edit / delete / validate are P4-02. `useSubmit` / `FormError` moved to `lib/form.tsx`; new `Textarea`. Checked in the built app: detected `~\.local\bin\claude.exe` 2.1.295, a bad override shows "not found", the saved agent has the right scope, args, model, role, instructions and status `ready`.
+- [x] **P4-02** · Agents manager UI: list, edit, delete, validate · `M`
+  - *2026-10-09:* New channels **`agents:update { id, …fields }`** (only the given fields change; the provider can't; blank executable = the default; a different executable resets the status to `unvalidated`; changes apply to the next start) and **`agents:delete { id }`** (`CONFLICT` "… is running. Stop it before deleting it." while one of its sessions is active; its ended sessions go with it, their terminal rows stay as plain terminals). Sidebar agent rows: click (or **Edit…** in the ⋯ menu) opens the same dialog as Add, prefilled, provider locked; hover **▶ Start** (also in the menu) opens a terminal running the agent in the project on screen — the project view registers itself with `AgentsProvider` as the launcher, so archived / no project → disabled; **Check CLI** runs `agents:validate` and shows the version or the adapter's message as a toast; **Delete…** asks first (Del key on the row too). The status dot (not checked / found / not found / failed) is refreshed after saving, checking and starting. `useProjectTerminals` gained `startAgent(agent)` (Start Claude Code uses the same path). Checked in the built app: add → `ready`; edit name + bad path + role → saved, `not_found`; back to blank → `claude`; Check CLI → "CLI found · Version 2.1.295"; ▶ Start → Claude Code tab, Ready; Delete while running → refused with the message; after Stop → deleted, sidebar empty.
+- [x] **P4-03** · `GeminiAdapter` + `CodexAdapter` · `M`
+  - *2026-10-09:* `packages/adapters/src/gemini.ts`: `gemini` on PATH (npm `@google/gemini-cli`, a `.cmd` shim on Windows); `model` → `--model`. Gemini CLI has no way to *add* instructions at start (`GEMINI_SYSTEM_MD` replaces its whole system prompt, tool rules included; `-i` would send them as a first message), so role / instructions aren't passed — project instructions go in `GEMINI.md`. `codex.ts`: `codex` on PATH (npm `@openai/codex`); `model` → `--model`; role + instructions → `-c developer_instructions=<JSON string>` (Codex config key "Additional developer instructions injected into the session"; `-c` values parse as TOML and a JSON string is a TOML basic string, so quotes and line breaks survive on one line). Both: `--version` check, default activity rules; credentials (`GEMINI_API_KEY` / `OPENAI_API_KEY`) come with P4-05. New adapter field **`supportsInstructions`** (Claude, Codex: yes; Gemini: no), also in `agents:providers`; the dialog then disables Role / Instructions and says why — still no per-provider UI code. Role + instructions text shared as `agentInstructions()` in `cli-adapter.ts`. **Fixed on the way:** an argument with a line break passed to a `.cmd` shim (npm installs of any CLI) was cut at the break by cmd.exe, dropping every later argument too — e.g. Claude's multi-line `--append-system-prompt`. The platform layer now turns line breaks into spaces for batch files (no escape gets one through cmd.exe); real-shim test added. Checked in the built app: the provider list shows Claude Code, Gemini CLI, Codex CLI; Gemini (not installed here) → "not found", Role / Instructions disabled, Start → the adapter's message as a toast; a Codex agent pointed at a stand-in `codex.cmd` → found, version read, started (Ready) with `--model gpt-5-codex -c developer_instructions="Your role: Reviewer\n\nSay \"done\" & stop.\nSecond line."`. **Not yet checked with the real Gemini / Codex CLIs** (neither is installed on this machine) — needed for P4's Done-when.
 - [ ] **P4-04** · `CustomCLIAdapter` (any command the user enters) · `S`
 - [ ] **P4-05** · Credentials: encrypt with `safeStorage`, metadata-only UI, inject as env vars at launch · `M`
 - [ ] **P4-06** · Redact recognizable secrets from logs · `S`

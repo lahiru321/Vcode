@@ -255,6 +255,28 @@ describe.runIf(isWindows)('win32 .cmd argument round-trip', () => {
     });
     expect(JSON.parse(stdout)).toEqual(['ok']);
   });
+
+  it('passes multi-line and quoted arguments through a shim (line breaks become spaces)', async () => {
+    const dir = tempDir();
+    writeFileSync(
+      join(dir, 'echo.cjs'),
+      'process.stdout.write(JSON.stringify(process.argv.slice(2)))',
+    );
+    writeFileSync(join(dir, 'echo.cmd'), `@"${process.execPath}" "%~dp0echo.cjs" %*\r\n`);
+    const env = { ...process.env } as Environment;
+    const args = ['first line\nsecond line\r\nthird', 'say "hi" & 50% <b>', 'last'];
+    const command = win32.buildCommand({ path: join(dir, 'echo.cmd'), kind: 'batch' }, args, env);
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile(command.file, command.args, { windowsVerbatimArguments: true, env }, (error, out) =>
+        error ? reject(error) : resolve(String(out)),
+      );
+    });
+    expect(JSON.parse(stdout)).toEqual([
+      'first line second line third',
+      'say "hi" & 50% <b>',
+      'last',
+    ]);
+  });
 });
 
 describe.runIf(isWindows)('win32 shell and environment', () => {

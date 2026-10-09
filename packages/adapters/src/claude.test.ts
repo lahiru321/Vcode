@@ -177,8 +177,8 @@ describe('lifecycle hooks', () => {
 });
 
 describe('getAdapter', () => {
-  it('knows claude only, for now', () => {
+  it('knows claude', () => {
     expect(getAdapter('claude')).toBeInstanceOf(ClaudeAdapter);
-    expect(getAdapter('gemini')).toBeNull();
+    expect(getAdapter('unknown')).toBeNull();
   });
 });

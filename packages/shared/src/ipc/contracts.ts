@@ -116,6 +116,16 @@ export const CreateAgentRequest = z.strictObject({
 });
 export type CreateAgentRequest = z.infer<typeof CreateAgentRequest>;
 
+/**
+ * Only the given fields change; the provider can't. Changes apply to the agent's next start.
+ * A new executable resets the status to `unvalidated`.
+ */
+export const UpdateAgentRequest = CreateAgentRequest.omit({ adapter: true })
+  .partial()
+  .extend({ id: Id })
+  .refine((request) => Object.keys(request).length > 1, { message: 'Nothing to update' });
+export type UpdateAgentRequest = z.infer<typeof UpdateAgentRequest>;
+
 /** Global agents plus, with `projectId`, that project's own. */
 export const ListAgentsRequest = z.strictObject({ projectId: Id.optional() });
 
@@ -128,6 +138,34 @@ export const AgentValidation = z.object({
   message: z.string().nullable(),
 });
 export type AgentValidation = z.infer<typeof AgentValidation>;
+
+/** A provider the app has an adapter for. The UI builds its provider list from these. */
+export const AgentProvider = z.object({
+  id: z.enum(AGENT_ADAPTERS),
+  displayName: z.string(),
+  /** Looked up on PATH when the agent has no executable of its own, e.g. "claude". */
+  defaultExecutable: z.string(),
+  /** Whether the agent's role and instructions reach the CLI. */
+  supportsInstructions: z.boolean(),
+});
+export type AgentProvider = z.infer<typeof AgentProvider>;
+
+/** Looks for a provider's CLI before an agent is saved (Add Agent dialog). */
+export const DetectAgentRequest = z.strictObject({
+  adapter: z.enum(AGENT_ADAPTERS),
+  /** Command name or absolute path; blank or left out = the provider's default. */
+  executable: z.string().trim().max(4096).optional(),
+});
+export type DetectAgentRequest = z.infer<typeof DetectAgentRequest>;
+
+/** `path` is the file that was found (also for `error`, when it was found but failed). */
+export const AgentDetection = z.object({
+  status: z.enum(['ready', 'not_found', 'error']),
+  path: z.string().nullable(),
+  version: z.string().nullable(),
+  message: z.string().nullable(),
+});
+export type AgentDetection = z.infer<typeof AgentDetection>;
 
 // Terminals (V1 doc §11, §20). A terminal runs in a workspace; without `workspaceId` the
 // project's `main` workspace (its root folder) is used. Terminal data does not go through
@@ -228,6 +266,12 @@ export const invokeContracts = {
   'agents:create': { request: CreateAgentRequest, response: Agent },
   /** Runs the CLI's version check and records the result as the agent's status. */
   'agents:validate': { request: AgentIdRequest, response: AgentValidation },
+  'agents:update': { request: UpdateAgentRequest, response: Agent },
+  /** CONFLICT while the agent is running. Its ended sessions go with it. */
+  'agents:delete': { request: AgentIdRequest, response: z.object({ id: Id }) },
+  'agents:providers': { request: NoPayload, response: z.array(AgentProvider) },
+  /** Runs a provider's version check without saving anything. */
+  'agents:detect': { request: DetectAgentRequest, response: AgentDetection },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
   'terminals:attach': {

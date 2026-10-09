@@ -1,15 +1,18 @@
 import type { ReactNode } from 'react';
 import { APP_NAME } from '@vcode/shared';
-import { Bot, FolderPlus, Layers, Plus, Settings } from 'lucide-react';
+import { FolderPlus, Layers, Plus, Settings } from 'lucide-react';
 import { Button } from '@renderer/components/ui/button';
 import { ScrollArea } from '@renderer/components/ui/scroll-area';
 import { Separator } from '@renderer/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip';
+import { AgentList } from '@renderer/features/agents/AgentList';
+import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { ProjectList } from '@renderer/features/projects/ProjectList';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 
 export function Sidebar() {
   const { startAdd, selected } = useProjects();
+  const agents = useAgents();
 
   return (
     <aside className="flex min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -27,8 +30,8 @@ export function Sidebar() {
           <SidebarSection title="Projects" actionLabel="Add project" onAction={startAdd}>
             <ProjectList />
           </SidebarSection>
-          <SidebarSection title="Agents" actionLabel="Add agent">
-            <EmptyHint icon={<Bot />}>No agents configured</EmptyHint>
+          <SidebarSection title="Agents" actionLabel="Add agent" onAction={agents.startAdd}>
+            <AgentList />
           </SidebarSection>
           <SidebarSection title="Workspaces">
             <EmptyHint icon={<FolderPlus />}>

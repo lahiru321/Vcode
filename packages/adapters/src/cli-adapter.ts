@@ -20,6 +20,20 @@ export function parseVersion(output: string): string | null {
   return /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/.exec(output)?.[0] ?? null;
 }
 
+/** The agent's role and instructions as one text, for CLIs that take extra instructions. */
+export function agentInstructions(config: AgentConfig): string | null {
+  const parts: string[] = [];
+  const role = config.role?.trim();
+  if (role) {
+    parts.push(`Your role: ${role}`);
+  }
+  const instructions = config.instructions?.trim();
+  if (instructions) {
+    parts.push(instructions);
+  }
+  return parts.length > 0 ? parts.join('\n\n') : null;
+}
+
 /**
  * The common shape of an interactive coding CLI: found on PATH (or by path), checked with a
  * version flag, started with arguments. Providers override `launchArgs` and, where needed,
@@ -29,6 +43,7 @@ export abstract class CliAdapter implements AgentAdapter {
   abstract readonly id: string;
   abstract readonly displayName: string;
   abstract readonly defaultExecutable: string;
+  abstract readonly supportsInstructions: boolean;
   /** Arguments that print the version and exit. */
   protected readonly versionArgs: string[] = ['--version'];
 

@@ -1,4 +1,4 @@
-import { CliAdapter } from './cli-adapter';
+import { agentInstructions, CliAdapter } from './cli-adapter';
 import type { AgentConfig, Environment } from './types';
 
 /**
@@ -10,6 +10,7 @@ export class ClaudeAdapter extends CliAdapter {
   readonly id = 'claude';
   readonly displayName = 'Claude Code';
   readonly defaultExecutable = 'claude';
+  readonly supportsInstructions = true;
 
   protected override launchArgs(config: AgentConfig): string[] {
     const args: string[] = [];
@@ -17,7 +18,7 @@ export class ClaudeAdapter extends CliAdapter {
     if (model) {
       args.push('--model', model);
     }
-    const prompt = systemPrompt(config);
+    const prompt = agentInstructions(config);
     if (prompt) {
       args.push('--append-system-prompt', prompt);
     }
@@ -31,18 +32,4 @@ export class ClaudeAdapter extends CliAdapter {
     delete env.CLAUDE_CODE_ENTRYPOINT;
     return env;
   }
-}
-
-/** The agent's role and instructions, added to Claude's system prompt. */
-function systemPrompt(config: AgentConfig): string | null {
-  const parts: string[] = [];
-  const role = config.role?.trim();
-  if (role) {
-    parts.push(`Your role: ${role}`);
-  }
-  const instructions = config.instructions?.trim();
-  if (instructions) {
-    parts.push(instructions);
-  }
-  return parts.length > 0 ? parts.join('\n\n') : null;
 }

@@ -100,6 +100,8 @@ export interface AgentAdapter {
   readonly displayName: string;
   /** The command looked up on PATH when the user doesn't give a path, e.g. "claude". */
   readonly defaultExecutable: string;
+  /** Whether the agent's role and instructions reach the CLI (the UI says when they don't). */
+  readonly supportsInstructions: boolean;
 
   /** Checks the CLI is installed and runs (e.g. its version command). */
   validate(config: AgentConfig, ctx: AdapterContext, env: Environment): Promise<ValidationResult>;

@@ -4,7 +4,17 @@ import { loadBaseEnvironment, prepareTerminalEnvironment } from '../terminals/en
 import { adapterContext } from './run';
 import type { AgentDeps } from './service';
 
-export { createAgent, listAgents, toAgent, toAgentValidation, validateAgent } from './service';
+export {
+  createAgent,
+  deleteAgent,
+  detectAgent,
+  listAgents,
+  listProviders,
+  toAgent,
+  toAgentValidation,
+  updateAgent,
+  validateAgent,
+} from './service';
 
 /** The real dependencies of the agents service. */
 export function agentDeps(): AgentDeps {

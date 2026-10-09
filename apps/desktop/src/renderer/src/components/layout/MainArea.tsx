@@ -8,8 +8,10 @@ import {
   Plus,
   TerminalSquare,
 } from 'lucide-react';
+import { useEffect } from 'react';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
+import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 import { TerminalTabs } from '@renderer/features/terminals/TerminalTabs';
 import { TerminalView } from '@renderer/features/terminals/TerminalView';
@@ -39,8 +41,17 @@ export function MainArea() {
 
 function ProjectView({ project }: { project: Project }) {
   const { setArchived, startRename } = useProjects();
+  const agents = useAgents();
   const terminals = useProjectTerminals(project);
   const isArchived = project.status === 'archived';
+
+  // Agents started from the sidebar open here. Archived projects don't run agents.
+  const { registerLauncher } = agents;
+  const { startAgent } = terminals;
+  useEffect(
+    () => (isArchived ? undefined : registerLauncher(startAgent)),
+    [isArchived, registerLauncher, startAgent],
+  );
 
   return (
     <>
@@ -97,7 +108,8 @@ function ProjectView({ project }: { project: Project }) {
                 ? 'Restore the project to start agents'
                 : "Run Claude Code in the project's folder"
             }
-            onClick={() => void terminals.startClaude()}
+            // It may have created the default Claude agent.
+            onClick={() => void terminals.startClaude().then(agents.reload)}
           >
             <Bot />
             Start Claude Code
