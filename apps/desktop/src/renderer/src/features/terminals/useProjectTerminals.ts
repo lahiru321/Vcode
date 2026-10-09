@@ -1,5 +1,5 @@
-import type { Project, TerminalSession } from '@vcode/shared';
-import { invoke } from '@renderer/lib/ipc';
+import type { Agent, Project, TerminalSession } from '@vcode/shared';
+import { invoke, onEvent } from '@renderer/lib/ipc';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -14,6 +14,8 @@ export interface ProjectTerminals {
   loaded: boolean;
   activate: (id: string) => void;
   create: () => Promise<void>;
+  /** Opens a terminal running Claude Code (P3-07). */
+  startClaude: () => Promise<void>;
   /** Ends the terminal's process tree; the tab stays, marked as stopped. */
   stop: (id: string) => Promise<void>;
   /** Replaces the terminal's tab with a new terminal in the same place. */
@@ -25,6 +27,16 @@ export interface ProjectTerminals {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * The agent the "Start Claude Code" button runs: the project's own Claude agent, else a global
+ * one, else a new global "Claude Code" agent with the defaults (the agents manager is P4).
+ */
+async function claudeAgent(projectId: string): Promise<Agent> {
+  const agents = (await invoke('agents:list', { projectId })).filter((a) => a.adapter === 'claude');
+  const found = agents.find((a) => a.projectId === projectId) ?? agents[0];
+  return found ?? invoke('agents:create', { name: 'Claude Code', adapter: 'claude' });
 }
 
 /** Use with `key={project.id}`, so switching projects starts from a fresh state. */
@@ -54,19 +66,52 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     };
   }, [project.id]);
 
+  // Agent status changes (starting → ready → working ⇄ waiting → …) for this project's tabs.
+  useEffect(
+    () =>
+      onEvent('agent:status', ({ agentSessionId, status }) => {
+        setTerminals((current) =>
+          current.some((t) => t.agent?.sessionId === agentSessionId)
+            ? current.map((t) =>
+                t.agent?.sessionId === agentSessionId ? { ...t, agent: { ...t.agent, status } } : t,
+              )
+            : current,
+        );
+      }),
+    [],
+  );
+
   const replace = useCallback((id: string, terminal: TerminalSession) => {
     setTerminals((current) => current.map((t) => (t.id === id ? terminal : t)));
   }, []);
 
+  const open = useCallback((terminal: TerminalSession) => {
+    setTerminals((current) => [...current, terminal]);
+    setActiveId(terminal.id);
+  }, []);
+
   const create = useCallback(async () => {
     try {
-      const terminal = await invoke('terminals:create', { projectId: project.id, ...INITIAL_SIZE });
-      setTerminals((current) => [...current, terminal]);
-      setActiveId(terminal.id);
+      open(await invoke('terminals:create', { projectId: project.id, ...INITIAL_SIZE }));
     } catch (error) {
       toast.error('Could not open a terminal', { description: errorMessage(error) });
     }
-  }, [project.id]);
+  }, [project.id, open]);
+
+  const startClaude = useCallback(async () => {
+    try {
+      const agent = await claudeAgent(project.id);
+      open(
+        await invoke('terminals:create', {
+          projectId: project.id,
+          agentId: agent.id,
+          ...INITIAL_SIZE,
+        }),
+      );
+    } catch (error) {
+      toast.error('Could not start Claude Code', { description: errorMessage(error) });
+    }
+  }, [project.id, open]);
 
   const stop = useCallback(
     async (id: string) => {
@@ -126,6 +171,7 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     loaded,
     activate: setActiveId,
     create,
+    startClaude,
     stop,
     restart,
     close,

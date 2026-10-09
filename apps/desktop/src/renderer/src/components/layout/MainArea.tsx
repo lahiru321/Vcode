@@ -1,6 +1,7 @@
 import type { Project } from '@vcode/shared';
 import {
   ArchiveRestore,
+  Bot,
   FolderGit2,
   GitBranch,
   MoreHorizontal,
@@ -88,6 +89,19 @@ function ProjectView({ project }: { project: Project }) {
             <TerminalSquare />
             New terminal
           </Button>
+          <Button
+            size="sm"
+            disabled={isArchived}
+            title={
+              isArchived
+                ? 'Restore the project to start agents'
+                : "Run Claude Code in the project's folder"
+            }
+            onClick={() => void terminals.startClaude()}
+          >
+            <Bot />
+            Start Claude Code
+          </Button>
         </div>
       </header>
 
@@ -136,8 +150,7 @@ function NoTerminalsEmptyState() {
           </div>
           <h2 className="text-base font-semibold tracking-tight">No terminals open</h2>
           <p className="text-sm text-muted-foreground">
-            Open a terminal to run commands in this project's folder. AI agents will run here too,
-            side by side.
+            Start Claude Code or open a terminal in this project's folder. Each runs in its own tab.
           </p>
           <p className="flex items-center gap-1 text-xs text-muted-foreground">
             Project actions are in the

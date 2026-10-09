@@ -125,6 +125,11 @@ describe('TerminalManager activity', () => {
     fake.data('h');
     expect(onActivity).toHaveBeenCalledTimes(1);
 
+    // Neither is the redraw after a resize (e.g. a UI reload re-fitting the view).
+    manager.resize('s1', 100, 30);
+    fake.data('redraw');
+    expect(onActivity).toHaveBeenCalledTimes(1);
+
     vi.advanceTimersByTime(ECHO_WINDOW_MS);
     fake.data('Thinking…');
     expect(onActivity).toHaveBeenLastCalledWith('s1', 'output');

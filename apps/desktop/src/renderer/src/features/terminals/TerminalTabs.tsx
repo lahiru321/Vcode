@@ -1,7 +1,8 @@
 import type { TerminalSession } from '@vcode/shared';
 import { cn } from '@renderer/lib/utils';
-import { Plus, RotateCw, Square, TerminalSquare, X } from 'lucide-react';
+import { Bot, Plus, RotateCw, Square, TerminalSquare, X } from 'lucide-react';
 import { Button } from '@renderer/components/ui/button';
+import { AgentStatusBadge } from '@renderer/features/agents/AgentStatusBadge';
 
 interface TerminalTabsProps {
   terminals: TerminalSession[];
@@ -54,15 +55,23 @@ export function TerminalTabs({
                 }}
                 className="flex h-full items-center gap-1.5 pl-2.5 pr-1"
               >
-                <TerminalSquare className="size-3.5" />
+                {terminal.agent ? (
+                  <Bot className="size-3.5" />
+                ) : (
+                  <TerminalSquare className="size-3.5" />
+                )}
                 <span className="max-w-40 truncate">{terminal.title}</span>
-                <span
-                  className={cn(
-                    'size-1.5 rounded-full',
-                    running ? 'bg-success' : 'bg-muted-foreground/50',
-                  )}
-                  aria-label={running ? 'running' : 'ended'}
-                />
+                {terminal.agent ? (
+                  <AgentStatusBadge status={terminal.agent.status} />
+                ) : (
+                  <span
+                    className={cn(
+                      'size-1.5 rounded-full',
+                      running ? 'bg-success' : 'bg-muted-foreground/50',
+                    )}
+                    aria-label={running ? 'running' : 'ended'}
+                  />
+                )}
               </button>
               <button
                 onClick={() => onClose(terminal.id)}

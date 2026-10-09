@@ -27,6 +27,30 @@ describe('prepareTerminalEnvironment', () => {
     });
   });
 
+  it("drops a parent Claude Code session's markers, not the user's Claude settings", () => {
+    const env = prepareTerminalEnvironment(
+      {
+        PATH: '/usr/bin',
+        CLAUDECODE: '1',
+        CLAUDE_CODE_CHILD_SESSION: '1',
+        CLAUDE_CODE_MESSAGING_TOKEN: 'secret',
+        Claude_Pid: '12',
+        CLAUDE_CODE_USE_BEDROCK: '1',
+        ANTHROPIC_MODEL: 'opus',
+      },
+      '1',
+    );
+    expect(env).toMatchObject({ CLAUDE_CODE_USE_BEDROCK: '1', ANTHROPIC_MODEL: 'opus' });
+    for (const name of [
+      'CLAUDECODE',
+      'CLAUDE_CODE_CHILD_SESSION',
+      'CLAUDE_CODE_MESSAGING_TOKEN',
+      'Claude_Pid',
+    ]) {
+      expect(env).not.toHaveProperty(name);
+    }
+  });
+
   it('does not change its input', () => {
     const base = { ELECTRON_X: '1' };
     prepareTerminalEnvironment(base, '1');

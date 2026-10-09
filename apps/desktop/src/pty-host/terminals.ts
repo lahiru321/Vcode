@@ -244,6 +244,8 @@ export class TerminalManager {
 }
 
 function resize(terminal: Terminal, cols: number, rows: number): void {
+  // The CLI redraws for the new size: that output isn't work either.
+  terminal.activity?.input();
   terminal.pty.resize(cols, rows);
   terminal.mirror.resize(cols, rows);
 }

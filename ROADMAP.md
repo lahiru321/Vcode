@@ -34,8 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P3 — First CLI Agent
 
 **Next up:**
-1. `P3-07` "Start Claude Code" button + status badge
-2. Check P3 **Done when** by hand
+1. Owner: check Claude Code's own `/login` flow inside the app, then mark P3 done
+2. `P4-01` Add Agent dialog
+3. `P4-02` Agents manager UI (list, edit, delete, validate)
 
 ---
 
@@ -45,7 +46,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 |---|---|---|---|---|
 | P1 | Foundation | App opens, projects persist, CI green on Windows + macOS | L | Done |
 | P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | Done |
-| P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | To do |
+| P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Checking |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | To do |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | To do |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | To do |
@@ -169,12 +170,15 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-09:* `AGENT_SESSION_STATUSES` (`created` / `starting` / `ready` / `working` / `waiting` / `stopped` / `failed` / `completed`) in `shared/domain.ts`; migration `0001_agent_session_statuses` (default `created`). `src/main/agents/sessions.ts`: the agent session row is created with its terminal (one transaction, `terminal_sessions.agent_session_id`) → `starting` → follows the terminal's end: exit 0 → `completed`, other exit → `failed`, stopped (user or quit) → `stopped`, host crash → `failed`, left over from an earlier run → `failed` at launch. Ended sessions never change again; each change is emitted and forwarded to every window as the **`agent:status`** event `{ agentSessionId, agentId, status }`, and `adapter.cleanup()` runs once it ends. Restarting an agent terminal starts the same agent again as a new session. Terminal responses now carry `agent: { sessionId, agentId, name, adapter, status } | null`. READY / WORKING / WAITING come with P3-06.
 - [x] **P3-06** · Best-effort `READY` / `WORKING` / `WAITING` detection (output idle timeout, terminal bell) · `M`
   - *2026-10-09:* PTY host `ActivityTracker` (`src/pty-host/activity.ts`) for terminals spawned with `trackActivity` (agents only): start-up counts as busy; output after a quiet spell → `output`; **1.5 s** without output → `idle` (also when the CLI prints nothing at start); output within **150 ms** of input is the echo of typing and ignored; the bell comes from the screen mirror's parser (`onBell`, so the BEL that ends an OSC sequence doesn't count), at most once a second. Only changes are sent (new host → main message `activity`, supervisor event `terminalActivity`). Main asks the agent's adapter (`getStatus(current, signal)`, default rules in P3-01) and records the new status, which goes out as `agent:status`; ended sessions ignore signals. Checked with the real Claude Code 2.1.294: its start-up screen settles after ~2 s (→ `ready`) and stays quiet while waiting.
-- [ ] **P3-07** · "Start Claude Code" button per project + status badge · `S`
+- [x] **P3-07** · "Start Claude Code" button per project + status badge · `S`
+  - *2026-10-09:* Project header: **Start Claude Code** (next to New terminal; disabled for archived projects). It runs the project's own Claude agent, else a global one, else creates a global "Claude Code" agent with the defaults (the agents manager is P4-02), then opens it like any terminal. A missing CLI shows the adapter's "not found" message as a toast. Agent tabs show a bot icon and an `AgentStatusBadge` (Starting / Ready / Working / Waiting / Stopped / Done / Failed; the tooltip says Ready / Working / Waiting are best guesses), kept current from `agent:status`. Found while checking in the built app: (1) when the app is started from inside a Claude Code session (e.g. `pnpm dev` in a Claude terminal), that session's variables (`CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_MESSAGING_TOKEN`, …) reached every terminal, so Claude thought it was nested and turned transcripts off. `prepareTerminalEnvironment` now drops that list (user settings like `CLAUDE_CODE_USE_BEDROCK` are kept). (2) A UI reload re-fits the view, and Claude's redraw after the resize counted as work (Ready → Waiting); a resize now counts like a keystroke. The sidebar's Agents section and the status bar's "0 agents running" are still placeholders (P4-02, P5-07). Driving the built app from a Claude Code / VS Code terminal: unset `ELECTRON_RUN_AS_NODE` first (VS Code sets it, and Electron then runs as plain Node).
 
 **Done when:**
 - Claude Code starts inside the app in the project folder.
 - Claude Code's own login flow works (no credential handling by the app).
 - You can chat with it and it edits files in the project.
+
+*2026-10-09, checked by driving the built app (Playwright, temp `userData` and project folder):* Start Claude Code → Claude Code 2.1.295 in the project folder, badge Starting → Ready; accepted its folder-trust prompt; asked it to create `hello.txt` → badge Working → Waiting, file written with the right content. Stop → Stopped, Restart → a new session, Ready; UI reload kept the tab, screen and Ready badge; after quit no `claude.exe` from the app was left. Login: Claude used its existing login (the app passes no credentials); a fresh `/login` was not tried, so the owner still needs to check that one.
 
 ---
 
@@ -348,3 +352,4 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-02** — App renamed **AI Agent Hub → Vcode** (product name, window title, `%APPDATA%\Vcode\vcode.db`, `@vcode/*` packages, `window.vcode` bridge). The spec documents keep their original names. GitHub: https://github.com/lahiru321/Vcode
 - **2026-10-03** — **P1 Foundation done** (P1-13 … P1-16). All three Done-when checks pass: the app window opens, projects persist across restarts, CI is green on Windows and macOS. P1-09 note corrected (better-sqlite3 build scripts are now skipped).
 - **2026-10-09** — **P2 Terminal Engine done** (P2-05 … P2-07, P2-09 … P2-11). Marked done by the owner after the Done-when checks (typing with live output, screen kept on Ctrl+R, Stop ends child processes, no orphans after quit). Also fixed on the way: typing into a terminal did nothing in dev (double attach under React StrictMode), and terminals left `running` by an earlier run could not be attached.
+- **2026-10-09** — **P3 First CLI Agent built** (P3-01 … P3-07). Agents run through `terminals:create { agentId }` rather than a separate start channel, following V1 doc §15. New `agent:status` event and `agents:list` / `agents:create` / `agents:validate` channels; migration `0001_agent_session_statuses`. Done-when checks pass in the built app except a fresh `/login`, which is left for the owner.

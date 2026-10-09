@@ -26,6 +26,7 @@ export class ActivityTracker {
     this.armIdle();
   }
 
+  /** The user typed or resized: output right after it is a redraw, not the agent working. */
   input(): void {
     this.lastInputAt = this.now();
   }
