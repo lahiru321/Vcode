@@ -31,12 +31,12 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P3 — First CLI Agent
+**Current phase:** P4 — Agent Registry
 
 **Next up:**
-1. Owner: check Claude Code's own `/login` flow inside the app, then mark P3 done
-2. `P4-01` Add Agent dialog
-3. `P4-02` Agents manager UI (list, edit, delete, validate)
+1. `P4-01` Add Agent dialog
+2. `P4-02` Agents manager UI (list, edit, delete, validate)
+3. `P4-03` `GeminiAdapter` + `CodexAdapter`
 
 ---
 
@@ -46,7 +46,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 |---|---|---|---|---|
 | P1 | Foundation | App opens, projects persist, CI green on Windows + macOS | L | Done |
 | P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | Done |
-| P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Checking |
+| P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | To do |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | To do |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | To do |
@@ -178,7 +178,7 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - Claude Code's own login flow works (no credential handling by the app).
 - You can chat with it and it edits files in the project.
 
-*2026-10-09, checked by driving the built app (Playwright, temp `userData` and project folder):* Start Claude Code → Claude Code 2.1.295 in the project folder, badge Starting → Ready; accepted its folder-trust prompt; asked it to create `hello.txt` → badge Working → Waiting, file written with the right content. Stop → Stopped, Restart → a new session, Ready; UI reload kept the tab, screen and Ready badge; after quit no `claude.exe` from the app was left. Login: Claude used its existing login (the app passes no credentials); a fresh `/login` was not tried, so the owner still needs to check that one.
+*2026-10-09, checked by driving the built app (Playwright, temp `userData` and project folder):* Start Claude Code → Claude Code 2.1.295 in the project folder, badge Starting → Ready; accepted its folder-trust prompt; asked it to create `hello.txt` → badge Working → Waiting, file written with the right content. Stop → Stopped, Restart → a new session, Ready; UI reload kept the tab, screen and Ready badge; after quit no `claude.exe` from the app was left. Login: Claude used its existing login (the app passes no credentials); the owner then checked a fresh `/login` inside the app and it worked.
 
 ---
 
