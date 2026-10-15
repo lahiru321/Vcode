@@ -2,6 +2,7 @@ import { basename } from 'node:path';
 import {
   IpcError,
   type CreateProjectRequest,
+  type JsonValue,
   type ProjectStatus,
   type UpdateProjectRequest,
 } from '@vcode/shared';
@@ -63,6 +64,17 @@ export function getProject(db: AppDatabase, id: string): ProjectRow {
     throw new IpcError('NOT_FOUND', 'Project not found. It may have been deleted.');
   }
   return project;
+}
+
+/** The saved panel grid (P5-05), as the renderer gave it; null if there is none. */
+export function getProjectLayout(db: AppDatabase, id: string): { layout: JsonValue } {
+  return { layout: (getProject(db, id).layoutJson ?? null) as JsonValue };
+}
+
+export function saveProjectLayout(db: AppDatabase, id: string, layout: JsonValue): null {
+  getProject(db, id);
+  db.update(projects).set({ layoutJson: layout }).where(eq(projects.id, id)).run();
+  return null;
 }
 
 export async function createProject(

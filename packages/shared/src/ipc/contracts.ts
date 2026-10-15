@@ -76,6 +76,28 @@ export const UpdateProjectRequest = z
   });
 export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequest>;
 
+/** Any JSON value. */
+export const JsonValue = z.json();
+export type JsonValue = z.infer<typeof JsonValue>;
+
+/** Most layouts are a few kB; this leaves room for many panels. */
+const MAX_LAYOUT_BYTES = 1_000_000;
+
+/**
+ * The project's panel grid (P5-05): dockview's own JSON, which the renderer restores. Main only
+ * stores it; null means none.
+ */
+export const ProjectLayout = z.object({ layout: JsonValue.nullable() });
+export type ProjectLayout = z.infer<typeof ProjectLayout>;
+
+export const SaveLayoutRequest = z.strictObject({
+  id: Id,
+  layout: JsonValue.nullable().refine(
+    (layout) => JSON.stringify(layout).length <= MAX_LAYOUT_BYTES,
+    'The layout is too large',
+  ),
+});
+
 // Agents (V1 doc §12, §14, §20): a configured CLI, global (`projectId: null`) or for one project.
 // `env` holds plain variables only; an API key is a credential (`credentialId`), whose secret
 // never comes back here.
@@ -340,6 +362,8 @@ export const invokeContracts = {
   'projects:create': { request: CreateProjectRequest, response: Project },
   'projects:update': { request: UpdateProjectRequest, response: Project },
   'projects:delete': { request: ProjectIdRequest, response: z.object({ id: Id }) },
+  'projects:getLayout': { request: ProjectIdRequest, response: ProjectLayout },
+  'projects:saveLayout': { request: SaveLayoutRequest, response: z.null() },
   'agents:list': { request: ListAgentsRequest, response: z.array(Agent) },
   'agents:create': { request: CreateAgentRequest, response: Agent },
   /** Runs the CLI's version check and records the result as the agent's status. */

@@ -6,6 +6,7 @@ import {
   GitBranch,
   MoreHorizontal,
   Plus,
+  RotateCw,
   TerminalSquare,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -15,7 +16,10 @@ import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 import { NewTerminalDialog } from '@renderer/features/terminals/NewTerminalDialog';
 import { TerminalGrid } from '@renderer/features/terminals/TerminalGrid';
-import { useProjectTerminals } from '@renderer/features/terminals/useProjectTerminals';
+import {
+  useProjectTerminals,
+  type ProjectTerminals,
+} from '@renderer/features/terminals/useProjectTerminals';
 
 export function MainArea() {
   const { loaded, projects, selected } = useProjects();
@@ -119,11 +123,9 @@ function ProjectView({ project }: { project: Project }) {
         </div>
       </header>
 
-      {terminals.terminals.length > 0 ? (
-        <TerminalGrid terminals={terminals} />
-      ) : (
-        terminals.loaded && <NoTerminalsEmptyState />
-      )}
+      <RestoredBar terminals={terminals} archived={isArchived} />
+      {/* Mounted even when empty, so closing the last terminal is saved with the layout. */}
+      {terminals.loaded && <TerminalGrid terminals={terminals} watermark={NoTerminalsEmptyState} />}
 
       <NewTerminalDialog
         open={adding}
@@ -141,10 +143,65 @@ function ProjectView({ project }: { project: Project }) {
   );
 }
 
+/**
+ * Offered while panels from the saved layout show terminals that have ended (e.g. the app was
+ * closed): start them all again, or close them all.
+ */
+function RestoredBar({
+  terminals,
+  archived,
+}: {
+  terminals: ProjectTerminals;
+  /** Archived projects can't start terminals. */
+  archived: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const ended = terminals.terminals.filter((t) => terminals.restoredIds.has(t.id));
+  if (ended.length === 0) return null;
+
+  const each = async (action: (id: string) => Promise<void>) => {
+    setBusy(true);
+    // One after another, so each panel is replaced in turn.
+    for (const terminal of ended) await action(terminal.id);
+    setBusy(false);
+  };
+  const count = ended.length === 1 ? '1 terminal' : `${ended.length} terminals`;
+
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-1.5 text-xs">
+      <span className="text-muted-foreground">
+        {count} from your last session {ended.length === 1 ? 'has' : 'have'} ended.
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7"
+          disabled={busy}
+          onClick={() => void each(terminals.close)}
+        >
+          Close all
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="h-7"
+          disabled={busy || archived}
+          title={archived ? 'Restore the project to start terminals' : undefined}
+          onClick={() => void each(terminals.restart)}
+        >
+          <RotateCw />
+          Restart all
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function NoTerminalsEmptyState() {
   return (
     <>
-      <div className="flex flex-1 items-center justify-center p-8">
+      <div className="flex size-full items-center justify-center p-8">
         <div className="flex max-w-sm flex-col items-center gap-3 text-center">
           <div className="flex size-12 items-center justify-center rounded-xl border bg-card text-muted-foreground">
             <TerminalSquare className="size-6" />

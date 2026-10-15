@@ -9,6 +9,8 @@ export const INVOKE_CHANNELS = [
   'projects:create',
   'projects:update',
   'projects:delete',
+  'projects:getLayout',
+  'projects:saveLayout',
   'agents:list',
   'agents:create',
   'agents:update',

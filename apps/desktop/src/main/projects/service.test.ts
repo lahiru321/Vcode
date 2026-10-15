@@ -6,7 +6,9 @@ import {
   createProject,
   deleteProject,
   getProject,
+  getProjectLayout,
   listProjects,
+  saveProjectLayout,
   slugify,
   updateProject,
 } from './service';
@@ -137,5 +139,25 @@ describe('getProject / updateProject / deleteProject', () => {
       expect.objectContaining(notFound),
     );
     expect(() => deleteProject(db, MISSING_ID)).toThrow(expect.objectContaining(notFound));
+  });
+});
+
+describe('project layout', () => {
+  it('is null until saved, then returned as saved; null clears it', async () => {
+    const db = testDatabase();
+    const project = await createProject(db, { rootPath: folder('app') });
+    expect(getProjectLayout(db, project.id)).toEqual({ layout: null });
+    const layout = { grid: { orientation: 'HORIZONTAL' }, panels: { a: { id: 'a' } } };
+    saveProjectLayout(db, project.id, layout);
+    expect(getProjectLayout(db, project.id)).toEqual({ layout });
+    saveProjectLayout(db, project.id, null);
+    expect(getProjectLayout(db, project.id)).toEqual({ layout: null });
+  });
+
+  it('fails for an unknown project', () => {
+    const db = testDatabase();
+    const notFound = expect.objectContaining({ code: 'NOT_FOUND' });
+    expect(() => getProjectLayout(db, MISSING_ID)).toThrow(notFound);
+    expect(() => saveProjectLayout(db, MISSING_ID, null)).toThrow(notFound);
   });
 });

@@ -1,11 +1,13 @@
-import type { Agent, Project, TerminalSession } from '@vcode/shared';
+import type { Agent, JsonValue, Project, TerminalSession } from '@vcode/shared';
 import { invoke, onEvent } from '@renderer/lib/ipc';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 // The terminals shown for a project: the ones still running when the project is opened, plus
 // those opened since. Ended terminals stay (marked as ended) until they are closed. Where each one
-// is shown, and which is active, is up to the panel grid (TerminalGrid).
+// is shown, and which is active, is up to the panel grid (TerminalGrid), whose layout is saved
+// per project (P5-05). Ended terminals that the saved layout still shows come back too, as
+// "restored": their panels keep their place and offer a restart (e.g. after the app was closed).
 
 /** Size a terminal is created at; replaced by the real size once its view fits. */
 export const INITIAL_SIZE = { cols: 80, rows: 24 };
@@ -13,6 +15,12 @@ export const INITIAL_SIZE = { cols: 80, rows: 24 };
 export interface ProjectTerminals {
   terminals: TerminalSession[];
   loaded: boolean;
+  /** The grid as it was saved for the project, or null. Read once, when the grid starts. */
+  savedLayout: JsonValue | null;
+  /** Ended terminals that came back with the saved layout: they have no screen to show. */
+  restoredIds: ReadonlySet<string>;
+  /** Saves the grid for the next time the project opens. */
+  saveLayout: (layout: JsonValue | null) => void;
   /** Opens a plain shell; resolves to the new terminal, or null if it could not be opened. */
   create: () => Promise<TerminalSession | null>;
   /** Shows a terminal of this project that was opened elsewhere (the New terminal dialog). */
@@ -30,6 +38,15 @@ export interface ProjectTerminals {
   /** Stops the terminal if it is running and removes it. */
   close: (id: string) => Promise<void>;
   markExited: (id: string, exitCode: number) => void;
+}
+
+/** The terminal ids in a saved dockview layout (its panel ids). */
+function layoutPanelIds(layout: JsonValue | null): Set<string> {
+  const panels =
+    layout && typeof layout === 'object' && !Array.isArray(layout) ? layout.panels : null;
+  return new Set(
+    panels && typeof panels === 'object' && !Array.isArray(panels) ? Object.keys(panels) : [],
+  );
 }
 
 function errorMessage(error: unknown): string {
@@ -50,14 +67,27 @@ async function claudeAgent(projectId: string): Promise<Agent> {
 export function useProjectTerminals(project: Project): ProjectTerminals {
   const [terminals, setTerminals] = useState<TerminalSession[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [savedLayout, setSavedLayout] = useState<JsonValue | null>(null);
+  const [restoredIds, setRestoredIds] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
-    invoke('terminals:list', { projectId: project.id }).then(
-      (list) => {
+    // Without its layout the project still opens, with the running terminals in a fresh grid.
+    const layout = invoke('projects:getLayout', { id: project.id }).then(
+      (saved) => saved.layout,
+      (error: unknown) => {
+        console.warn('Could not load the saved layout:', errorMessage(error));
+        return null;
+      },
+    );
+    Promise.all([invoke('terminals:list', { projectId: project.id }), layout]).then(
+      ([list, layout]) => {
         if (cancelled) return;
-        const running = list.filter((t) => t.status === 'running');
-        setTerminals(running);
+        const inLayout = layoutPanelIds(layout);
+        const ended = list.filter((t) => t.status !== 'running' && inLayout.has(t.id));
+        setTerminals(list.filter((t) => t.status === 'running' || inLayout.has(t.id)));
+        setRestoredIds(new Set(ended.map((t) => t.id)));
+        setSavedLayout(layout);
         setLoaded(true);
       },
       (error: unknown) => {
@@ -180,6 +210,15 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     setTerminals((current) => current.filter((t) => t.id !== id));
   }, []);
 
+  const saveLayout = useCallback(
+    (layout: JsonValue | null) => {
+      invoke('projects:saveLayout', { id: project.id, layout }).catch((error: unknown) => {
+        console.warn('Could not save the layout:', errorMessage(error));
+      });
+    },
+    [project.id],
+  );
+
   const markExited = useCallback((id: string, exitCode: number) => {
     // A stopped terminal keeps its status; its process exiting is expected.
     setTerminals((current) =>
@@ -192,6 +231,9 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
   return {
     terminals,
     loaded,
+    savedLayout,
+    restoredIds,
+    saveLayout,
     create,
     adopt: open,
     startClaude,

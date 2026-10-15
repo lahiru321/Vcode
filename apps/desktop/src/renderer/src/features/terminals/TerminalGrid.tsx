@@ -1,4 +1,4 @@
-import type { TerminalSession } from '@vcode/shared';
+import type { JsonValue, TerminalSession } from '@vcode/shared';
 import { Button } from '@renderer/components/ui/button';
 import {
   ContextMenu,
@@ -26,6 +26,7 @@ import {
   type IDockviewHeaderActionsProps,
   type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
+  type SerializedDockview,
 } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import {
@@ -56,6 +57,7 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type FunctionComponent,
   type KeyboardEvent,
 } from 'react';
 import { TerminalSearch } from './TerminalSearch';
@@ -174,8 +176,9 @@ function evenOut(api: DockviewApi): void {
 }
 
 function endedLabel(terminal: TerminalSession): string {
-  const what = terminal.status === 'stopped' ? 'Stopped' : 'Ended';
-  return terminal.exitCode !== null ? `${what} (exit code ${terminal.exitCode})` : what;
+  // A stopped terminal was ended by Vcode (Stop, Close, or quitting), so its code says nothing.
+  if (terminal.status === 'stopped') return 'Stopped';
+  return terminal.exitCode !== null ? `Ended (exit code ${terminal.exitCode})` : 'Ended';
 }
 
 /**
@@ -242,7 +245,58 @@ function syncPanels(
   return placed;
 }
 
-export function TerminalGrid({ terminals }: { terminals: ProjectTerminals }) {
+/** Saves at most this often while the layout changes (dragging a sash fires many changes). */
+const SAVE_DELAY_MS = 500;
+
+/**
+ * Restores the project's saved grid. Panels whose terminal is no longer shown are removed by the
+ * first sync, and terminals that aren't in it get a cell of their own.
+ */
+function restoreLayout(api: DockviewApi, layout: JsonValue | null): void {
+  if (!layout) return;
+  try {
+    api.fromJSON(layout as unknown as SerializedDockview);
+  } catch (error) {
+    // Saved by another version, or damaged: start from an empty grid.
+    console.warn('Could not restore the saved layout:', error);
+    api.clear();
+  }
+}
+
+/** Saves the grid after it changes, and once more when the grid goes (e.g. another project). */
+function useLayoutSaving(api: DockviewApi | null, save: ProjectTerminals['saveLayout']): void {
+  useEffect(() => {
+    if (!api) return;
+    let pending: JsonValue | null | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      clearTimeout(timer);
+      if (pending !== undefined) save(pending);
+      pending = undefined;
+    };
+    const subscription = api.onDidLayoutChange(() => {
+      // Taken now: by the time a flush runs on unmount the grid may already be gone.
+      // Through JSON: dockview leaves some fields undefined, which isn't JSON.
+      pending =
+        api.panels.length > 0 ? (JSON.parse(JSON.stringify(api.toJSON())) as JsonValue) : null;
+      clearTimeout(timer);
+      timer = setTimeout(flush, SAVE_DELAY_MS);
+    });
+    return () => {
+      subscription.dispose();
+      flush();
+    };
+  }, [api, save]);
+}
+
+export function TerminalGrid({
+  terminals,
+  watermark,
+}: {
+  terminals: ProjectTerminals;
+  /** Shown when there are no terminals. */
+  watermark: FunctionComponent;
+}) {
   const [api, setApi] = useState<DockviewApi | null>(null);
   const previousIds = useRef<readonly string[]>([]);
   // Set by a group's "+" or a split while its terminal is being created.
@@ -257,6 +311,8 @@ export function TerminalGrid({ terminals }: { terminals: ProjectTerminals }) {
     }
     previousIds.current = list.map((t) => t.id);
   }, [api, list]);
+
+  useLayoutSaving(api, terminals.saveLayout);
 
   const context: GridContext = {
     terminals: new Map(list.map((t) => [t.id, t])),
@@ -279,15 +335,45 @@ export function TerminalGrid({ terminals }: { terminals: ProjectTerminals }) {
         tabComponents={TAB_COMPONENTS}
         leftHeaderActionsComponent={NewTerminalAction}
         rightHeaderActionsComponent={GroupActions}
+        watermarkComponent={watermark}
         disableFloatingGroups
-        onReady={(event: DockviewReadyEvent) => setApi(event.api)}
+        onReady={(event: DockviewReadyEvent) => {
+          restoreLayout(event.api, terminals.savedLayout);
+          setApi(event.api);
+        }}
       />
     </GridContext>
   );
 }
 
+/** A terminal that came back with the saved layout after it ended: its screen is gone. */
+function EndedPanel({ terminal, onRestart }: { terminal: TerminalSession; onRestart: () => void }) {
+  return (
+    <div className="flex size-full items-center justify-center bg-[#0a0a0a] p-4">
+      <div className="flex max-w-xs flex-col items-center gap-3 text-center">
+        {terminal.agent ? (
+          <Bot className="size-6 text-muted-foreground" />
+        ) : (
+          <TerminalSquare className="size-6 text-muted-foreground" />
+        )}
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium">{terminal.title}</p>
+          <p className="text-xs text-muted-foreground">
+            {endedLabel(terminal)}. Restart it to run{' '}
+            {terminal.agent ? terminal.agent.name : 'a new shell'} here again.
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={onRestart}>
+          <RotateCw />
+          Restart
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function TerminalPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
-  const { actions, panels } = useGrid();
+  const { terminals, actions, panels } = useGrid();
   const [visible, setVisible] = useState(api.isVisible);
   const [active, setActive] = useState(api.isActive);
   const [controls, setControls] = useState<TerminalControls | null>(null);
@@ -309,6 +395,11 @@ function TerminalPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
     panels.set(terminalId, { ...controls, openSearch: () => setSearching(true) });
     return () => void panels.delete(terminalId);
   }, [panels, terminalId, controls]);
+
+  const restored = actions.restoredIds.has(terminalId) ? terminals.get(terminalId) : undefined;
+  if (restored) {
+    return <EndedPanel terminal={restored} onRestart={() => void actions.restart(terminalId)} />;
+  }
 
   const { markExited } = actions;
   return (
@@ -616,17 +707,28 @@ function GroupActions({ activePanel, group, containerApi }: IDockviewHeaderActio
   if (!terminal) return null;
   // Looked up on click: the terminal may still be connecting when the header renders.
   const controls = () => panels.get(terminal.id);
+  // A terminal restored after it ended has no screen to search or copy from.
+  const hasScreen = !actions.restoredIds.has(terminal.id);
 
   return (
     <div className="flex h-full items-center gap-0.5 px-1">
-      <HeaderButton label="Find in terminal" title="Find" onClick={() => controls()?.openSearch()}>
+      <HeaderButton
+        label="Find in terminal"
+        title="Find"
+        disabled={!hasScreen}
+        onClick={() => controls()?.openSearch()}
+      >
         <Search />
       </HeaderButton>
       <DropdownMenu
         onOpenChange={(open) => open && setHasSelection(controls()?.hasSelection() ?? false)}
       >
         <DropdownMenuTrigger asChild>
-          <HeaderButton label="More terminal actions" title="Copy, paste, clear">
+          <HeaderButton
+            label="More terminal actions"
+            title="Copy, paste, clear"
+            disabled={!hasScreen}
+          >
             <Ellipsis />
           </HeaderButton>
         </DropdownMenuTrigger>

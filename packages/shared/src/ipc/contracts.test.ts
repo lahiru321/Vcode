@@ -5,6 +5,7 @@ import {
   eventContracts,
   invokeContracts,
   Project,
+  SaveLayoutRequest,
   SetSettingsRequest,
   SETTING_DEFAULTS,
   Settings,
@@ -70,5 +71,15 @@ describe('contracts', () => {
   it('SETTING_DEFAULTS is a valid Settings value with every key', () => {
     expect(Settings.parse(SETTING_DEFAULTS)).toEqual(SETTING_DEFAULTS);
     expect(Object.keys(SETTING_DEFAULTS).sort()).toEqual(Object.keys(Settings.shape).sort());
+  });
+
+  it('SaveLayoutRequest takes JSON or null, within a size limit', () => {
+    const layout = { grid: { root: { type: 'branch', data: [] } }, panels: {} };
+    expect(SaveLayoutRequest.parse({ id: ID, layout })).toEqual({ id: ID, layout });
+    expect(SaveLayoutRequest.parse({ id: ID, layout: null }).layout).toBeNull();
+    expect(SaveLayoutRequest.safeParse({ id: ID, layout: { f: () => 1 } }).success).toBe(false);
+    expect(SaveLayoutRequest.safeParse({ id: ID, layout: 'x'.repeat(1_000_001) }).success).toBe(
+      false,
+    );
   });
 });
