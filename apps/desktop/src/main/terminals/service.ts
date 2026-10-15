@@ -16,7 +16,7 @@ import {
 import { credentialEnvironment, type SecretBox } from '../credentials/service';
 import type { AppDatabase } from '../db';
 import { agents, terminalSessions, workspaces } from '../db/schema';
-import { resolveExistingFolder } from '../fs/folders';
+import { resolveWorkspaceFolder } from '../fs/folders';
 import { createLogger } from '../logging';
 import type { Command, Environment } from '../platform';
 import { getProject, type ProjectRow } from '../projects/service';
@@ -78,8 +78,9 @@ export async function createTerminal(
   const workspace = request.workspaceId
     ? getWorkspace(db, request.workspaceId, project.id)
     : ensureMainWorkspace(db, project);
-  // Checked now rather than left to the spawn, which fails with a less helpful message.
-  const cwd = await resolveExistingFolder(workspace.path);
+  // Checked now rather than left to the spawn, which fails with a less helpful message; and
+  // again on every start, since the folder could have been swapped for a link out of the project.
+  const cwd = await resolveWorkspaceFolder(project.rootPath, workspace.path);
 
   const baseEnv = await deps.environment();
   const launch = request.agentId

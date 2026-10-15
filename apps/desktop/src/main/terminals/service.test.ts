@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -184,6 +184,29 @@ describe('createTerminal', () => {
     });
     expect(request).not.toHaveBeenCalled();
     expect(db.select().from(terminalSessions).all()).toEqual([]);
+  });
+
+  it('refuses a workspace folder that now links outside the project', async () => {
+    const { db, deps, request } = setup();
+    const p = await project(db);
+    const inside = join(p.rootPath, 'ws');
+    mkdirSync(inside);
+    const [workspace] = db
+      .insert(workspaces)
+      .values({ projectId: p.id, name: 'ws', path: inside, kind: 'folder' })
+      .returning()
+      .all();
+    // Swapped for a junction / symlink to a folder elsewhere after it was created.
+    rmSync(inside, { recursive: true });
+    symlinkSync(tempDir(), inside, 'junction');
+
+    await expect(
+      createTerminal(deps, { projectId: p.id, workspaceId: workspace!.id, cols: 80, rows: 24 }),
+    ).rejects.toMatchObject({
+      code: 'INVALID_REQUEST',
+      message: expect.stringContaining('inside the project folder'),
+    });
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('marks the session failed when the host cannot start it', async () => {

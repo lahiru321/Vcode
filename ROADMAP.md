@@ -35,8 +35,8 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 **Next up:**
 1. P5 Done-when check by the owner: 4+ agents at once in one project, the layout back after an app restart, stopping one leaves the others running
-2. `P6-05` Path guards: every workspace must resolve inside the project root (no symlink escapes)
-3. `P6-02` / `P6-03` Workspace manager UI + folder workspaces
+2. `P6-02` / `P6-03` Workspace manager UI + folder workspaces
+3. `P6-04` Git worktree workspaces
 
 ---
 
@@ -248,7 +248,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - [ ] **P6-02** · Workspace manager UI: list, create, delete · `M`
 - [ ] **P6-03** · Folder workspaces · `S`
 - [ ] **P6-04** · Git worktree workspaces: create branch + worktree under `workspaces/`, remove safely (warn on uncommitted changes) · `L`
-- [ ] **P6-05** · Path guards: every workspace must resolve inside the project root (no symlink escapes) · `S`
+- [x] **P6-05** · Path guards: every workspace must resolve inside the project root (no symlink escapes) · `S`
+  - *2026-10-15:* `src/main/fs/folders.ts`: `isInsideFolder(root, path)` (by `path.relative`, so `shop-2` isn't inside `shop` and a `..name` folder is), **`resolveWorkspaceFolder(projectRoot, input)`** for an existing folder (relative = from the root; the root and the folder are both `realpath`ed, so a junction / symlink anywhere on the way is followed before the check; the root itself is allowed — that's `main`) and **`planWorkspaceFolder(projectRoot, input)`** for a folder about to be created (its deepest existing ancestor is `realpath`ed and the rest appended; must be strictly inside the root). Both refuse with `INVALID_REQUEST` "Workspaces must be inside the project folder: …". Done ahead of P6-02 so the create paths use them from the start. Terminals now check their workspace with `resolveWorkspaceFolder` on **every** start and restart (not only at creation), so a workspace folder later swapped for a link out of the project can't be started in. Tests: inside / outside / `..` / sibling-prefix cases, a junction pointing out (refused) and in (resolved to its target), a root reached through a link, a missing root, a planned folder under a junction pointing out, and a terminal refusing a swapped workspace folder before anything is spawned.
 - [ ] **P6-06** · Branch name + uncommitted-changes indicator per workspace in the sidebar · `M`
 - [ ] **P6-07** · Reveal in Explorer / Open in VS Code · `S`
 
