@@ -5,7 +5,6 @@ import {
   type TerminalHostMessage,
 } from '@vcode/shared';
 import { openTerminalPort } from '@renderer/lib/terminal-port';
-import { cn } from '@renderer/lib/utils';
 import { blockClipboardSequences, confirmedLinkHandler } from './safety';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -53,12 +52,14 @@ const FONT_FAMILY =
 
 interface TerminalViewProps {
   terminalId: string;
-  /** Only the active terminal is shown, sized and focused. */
-  active: boolean;
+  /** Shown in its panel group: it is sized when this turns on. */
+  visible: boolean;
+  /** The active panel: it takes keyboard focus when this turns on. */
+  focused: boolean;
   onExit: (exitCode: number) => void;
 }
 
-export function TerminalView({ terminalId, active, onExit }: TerminalViewProps) {
+export function TerminalView({ terminalId, visible, focused, onExit }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<(() => void) | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -104,7 +105,7 @@ export function TerminalView({ terminalId, active, onExit }: TerminalViewProps) 
 
     let lastSize = '';
     const fit = (): void => {
-      // A hidden terminal has no size; it is fitted when it becomes active.
+      // A hidden terminal has no size; it is fitted when it becomes visible.
       if (disposed || container.clientWidth === 0 || container.clientHeight === 0) {
         return;
       }
@@ -174,19 +175,19 @@ export function TerminalView({ terminalId, active, onExit }: TerminalViewProps) 
   }, [terminalId]);
 
   useEffect(() => {
-    if (active) {
-      requestAnimationFrame(() => {
-        fitRef.current?.();
-        terminalRef.current?.focus();
-      });
+    if (visible) {
+      requestAnimationFrame(() => fitRef.current?.());
     }
-  }, [active]);
+  }, [visible]);
+
+  useEffect(() => {
+    if (focused) {
+      requestAnimationFrame(() => terminalRef.current?.focus());
+    }
+  }, [focused]);
 
   return (
-    <div
-      className={cn('absolute inset-0 px-2 pt-1.5 pb-0.5', !active && 'hidden')}
-      data-terminal-id={terminalId}
-    >
+    <div className="size-full bg-[#0a0a0a] px-2 pt-1.5 pb-0.5" data-terminal-id={terminalId}>
       <div ref={containerRef} className="size-full" />
     </div>
   );

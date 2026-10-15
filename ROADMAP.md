@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P5 — Multi-Terminal Workspace
 
 **Next up:**
-1. `P5-01` dockview grid for terminal panels
-2. `P5-02` Add Terminal dialog: project → workspace → agent or plain shell
-3. `P5-03` Panel controls: close, maximize / restore, rename, rearrange, split
+1. `P5-02` Add Terminal dialog: project → workspace → agent or plain shell
+2. `P5-03` Panel controls: close, maximize / restore, rename, rearrange, split
+3. `P5-04` Terminal toolbar: copy, paste, search, clear, stop, restart
 
 ---
 
@@ -48,7 +48,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | Done |
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
-| P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | To do |
+| P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | In progress |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | To do |
 | P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | To do |
 | P8 | Distribution | Signed Windows installer with auto-update | M | To do |
@@ -216,7 +216,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 **Goal:** many agents side by side in a flexible, saved layout.
 **Depends on:** P2, P4.
 
-- [ ] **P5-01** · dockview grid for terminal panels · `M`
+- [x] **P5-01** · dockview grid for terminal panels · `M`
+  - *2026-10-09:* `dockview-react` 8.4 (in v8 the React bindings moved out of `dockview` into `dockview-react`). `features/terminals/TerminalGrid.tsx` replaces the P2 tab strip. `useProjectTerminals` still says which terminals exist; dockview owns placement and the active panel (`activeId` removed from the hook). Panel id = terminal id; a sync effect adds/removes panels when the list changes. New terminals fill a balanced grid row by row, up to ⌈√n⌉ per row (2 → side by side, 4 → 2 × 2, 6 → 3 × 2, 9 → 3 × 3), and every add evens out row heights and widths (rows are read from the groups' on-screen positions, so it still works after you drag things around); the group's `+` opens one as a tab of that group instead. A restarted terminal takes its old panel's place (same group and tab index). Panels use `renderer: 'always'`, so xterm stays attached while its tab is hidden; `TerminalView`'s `active` prop is split into `visible` (refit) and `focused`. Custom tab: icon, title, status dot / agent badge, close (also middle click). Group header: restart + stop for the group's visible terminal. Floating groups off. `themeDark` recoloured to the app tokens in `styles.css`. Checked in the built app: grids at 2 / 3 / 4 / 6 / 9 terminals, typing, `+` in a group, stop one (others keep running), restart in place, close, reload (running terminals come back; layout isn't saved until P5-05).
 - [ ] **P5-02** · Add Terminal dialog: project → workspace → agent or plain shell · `M`
 - [ ] **P5-03** · Panel controls: close, maximize / restore, rename, rearrange, split · `M`
 - [ ] **P5-04** · Terminal toolbar: copy, paste, search, clear, stop, restart (needs clipboard access: all browser permissions are denied since P1-05, so allow clipboard for the app only or route it through IPC) · `S`

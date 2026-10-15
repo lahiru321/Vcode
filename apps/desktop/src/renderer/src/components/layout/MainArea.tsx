@@ -13,12 +13,8 @@ import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
 import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
-import { TerminalTabs } from '@renderer/features/terminals/TerminalTabs';
-import { TerminalView } from '@renderer/features/terminals/TerminalView';
-import {
-  useProjectTerminals,
-  type ProjectTerminals,
-} from '@renderer/features/terminals/useProjectTerminals';
+import { TerminalGrid } from '@renderer/features/terminals/TerminalGrid';
+import { useProjectTerminals } from '@renderer/features/terminals/useProjectTerminals';
 
 export function MainArea() {
   const { loaded, projects, selected } = useProjects();
@@ -118,36 +114,10 @@ function ProjectView({ project }: { project: Project }) {
       </header>
 
       {terminals.terminals.length > 0 ? (
-        <TerminalsArea terminals={terminals} />
+        <TerminalGrid terminals={terminals} />
       ) : (
         terminals.loaded && <NoTerminalsEmptyState />
       )}
-    </>
-  );
-}
-
-function TerminalsArea({ terminals }: { terminals: ProjectTerminals }) {
-  return (
-    <>
-      <TerminalTabs
-        terminals={terminals.terminals}
-        activeId={terminals.activeId}
-        onActivate={terminals.activate}
-        onCreate={() => void terminals.create()}
-        onStop={(id) => void terminals.stop(id)}
-        onRestart={(id) => void terminals.restart(id)}
-        onClose={(id) => void terminals.close(id)}
-      />
-      <div className="relative min-h-0 flex-1 bg-[#0a0a0a]">
-        {terminals.terminals.map((terminal) => (
-          <TerminalView
-            key={terminal.id}
-            terminalId={terminal.id}
-            active={terminal.id === terminals.activeId}
-            onExit={(exitCode) => terminals.markExited(terminal.id, exitCode)}
-          />
-        ))}
-      </div>
     </>
   );
 }
@@ -162,7 +132,8 @@ function NoTerminalsEmptyState() {
           </div>
           <h2 className="text-base font-semibold tracking-tight">No terminals open</h2>
           <p className="text-sm text-muted-foreground">
-            Start Claude Code or open a terminal in this project's folder. Each runs in its own tab.
+            Start Claude Code or open a terminal in this project's folder. Each runs in its own
+            panel; drag tabs to arrange them side by side.
           </p>
           <p className="flex items-center gap-1 text-xs text-muted-foreground">
             Project actions are in the

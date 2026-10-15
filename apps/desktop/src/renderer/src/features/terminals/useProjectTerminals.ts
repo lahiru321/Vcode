@@ -4,25 +4,25 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 // The terminals shown for a project: the ones still running when the project is opened, plus
-// those opened since. Ended terminals stay (marked as ended) until they are closed.
+// those opened since. Ended terminals stay (marked as ended) until they are closed. Where each one
+// is shown, and which is active, is up to the panel grid (TerminalGrid).
 
 const INITIAL_SIZE = { cols: 80, rows: 24 }; // replaced by the real size once the view fits
 
 export interface ProjectTerminals {
   terminals: TerminalSession[];
-  activeId: string | null;
   loaded: boolean;
-  activate: (id: string) => void;
-  create: () => Promise<void>;
+  /** Opens a plain shell; resolves to the new terminal, or null if it could not be opened. */
+  create: () => Promise<TerminalSession | null>;
   /** Opens a terminal running Claude Code (P3-07). */
   startClaude: () => Promise<void>;
   /** Opens a terminal running `agent` (global, or one of this project's). */
   startAgent: (agent: Agent) => Promise<void>;
-  /** Ends the terminal's process tree; the tab stays, marked as stopped. */
+  /** Ends the terminal's process tree; its panel stays, marked as stopped. */
   stop: (id: string) => Promise<void>;
-  /** Replaces the terminal's tab with a new terminal in the same place. */
+  /** Replaces the terminal with a new one at the same place in the list. */
   restart: (id: string) => Promise<void>;
-  /** Stops the terminal if it is running and removes its tab. */
+  /** Stops the terminal if it is running and removes it. */
   close: (id: string) => Promise<void>;
   markExited: (id: string, exitCode: number) => void;
 }
@@ -44,7 +44,6 @@ async function claudeAgent(projectId: string): Promise<Agent> {
 /** Use with `key={project.id}`, so switching projects starts from a fresh state. */
 export function useProjectTerminals(project: Project): ProjectTerminals {
   const [terminals, setTerminals] = useState<TerminalSession[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -54,7 +53,6 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
         if (cancelled) return;
         const running = list.filter((t) => t.status === 'running');
         setTerminals(running);
-        setActiveId(running.at(-1)?.id ?? null);
         setLoaded(true);
       },
       (error: unknown) => {
@@ -68,7 +66,7 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     };
   }, [project.id]);
 
-  // Agent status changes (starting → ready → working ⇄ waiting → …) for this project's tabs.
+  // Agent status changes (starting → ready → working ⇄ waiting → …) for this project's terminals.
   useEffect(
     () =>
       onEvent('agent:status', ({ agentSessionId, status }) => {
@@ -89,14 +87,15 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
 
   const open = useCallback((terminal: TerminalSession) => {
     setTerminals((current) => [...current, terminal]);
-    setActiveId(terminal.id);
+    return terminal;
   }, []);
 
   const create = useCallback(async () => {
     try {
-      open(await invoke('terminals:create', { projectId: project.id, ...INITIAL_SIZE }));
+      return open(await invoke('terminals:create', { projectId: project.id, ...INITIAL_SIZE }));
     } catch (error) {
       toast.error('Could not open a terminal', { description: errorMessage(error) });
+      return null;
     }
   }, [project.id, open]);
 
@@ -145,9 +144,7 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
   const restart = useCallback(
     async (id: string) => {
       try {
-        const terminal = await invoke('terminals:restart', { terminalId: id });
-        replace(id, terminal);
-        setActiveId((current) => (current === id ? terminal.id : current));
+        replace(id, await invoke('terminals:restart', { terminalId: id }));
       } catch (error) {
         toast.error('Could not restart the terminal', { description: errorMessage(error) });
       }
@@ -155,24 +152,15 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     [replace],
   );
 
-  const close = useCallback(
-    async (id: string) => {
-      try {
-        await invoke('terminals:close', { terminalId: id });
-      } catch (error) {
-        toast.error('Could not close the terminal', { description: errorMessage(error) });
-        return;
-      }
-      const index = terminals.findIndex((t) => t.id === id);
-      const remaining = terminals.filter((t) => t.id !== id);
-      setTerminals(remaining);
-      // Like browser tabs: the neighbour on the right, else the one on the left.
-      setActiveId((current) =>
-        current === id ? (remaining[Math.min(index, remaining.length - 1)]?.id ?? null) : current,
-      );
-    },
-    [terminals],
-  );
+  const close = useCallback(async (id: string) => {
+    try {
+      await invoke('terminals:close', { terminalId: id });
+    } catch (error) {
+      toast.error('Could not close the terminal', { description: errorMessage(error) });
+      return;
+    }
+    setTerminals((current) => current.filter((t) => t.id !== id));
+  }, []);
 
   const markExited = useCallback((id: string, exitCode: number) => {
     // A stopped terminal keeps its status; its process exiting is expected.
@@ -185,9 +173,7 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
 
   return {
     terminals,
-    activeId,
     loaded,
-    activate: setActiveId,
     create,
     startClaude,
     startAgent,
