@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu';
 import { AgentStatusBadge } from '@renderer/features/agents/AgentStatusBadge';
+import { shortcutLabel, useShortcut, type ShortcutId } from '@renderer/lib/shortcuts';
 import { cn } from '@renderer/lib/utils';
 import {
   DockviewReact,
@@ -24,6 +25,7 @@ import {
   type DockviewGroupPanel,
   type DockviewReadyEvent,
   type IDockviewHeaderActionsProps,
+  type IDockviewPanel,
   type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
   type SerializedDockview,
@@ -72,6 +74,15 @@ import type { ProjectTerminals } from './useProjectTerminals';
 
 interface PanelParams {
   terminalId: string;
+}
+
+/** A menu item's shortcut, right-aligned. */
+function Kbd({ id }: { id: ShortcutId }) {
+  return (
+    <span className="ml-auto pl-4 text-xs tracking-wide text-muted-foreground">
+      {shortcutLabel(id)}
+    </span>
+  );
 }
 
 /** A terminal's controls, plus opening its find bar. */
@@ -289,6 +300,57 @@ function useLayoutSaving(api: DockviewApi | null, save: ProjectTerminals['saveLa
   }, [api, save]);
 }
 
+/** Every panel in reading order: groups row by row, then each group's tabs. */
+function panelsInOrder(api: DockviewApi): IDockviewPanel[] {
+  return gridRows(api).flatMap((row) => row.flatMap((group) => group.panels));
+}
+
+/** Moves to the next (`step` 1) or previous (-1) terminal, wrapping around. */
+function cyclePanels(api: DockviewApi, step: 1 | -1): void {
+  const panels = panelsInOrder(api);
+  if (panels.length === 0) return;
+  const current = api.activePanel ? panels.indexOf(api.activePanel) : -1;
+  const next = panels[(current + step + panels.length) % panels.length]!;
+  // A maximized group hides the others: show them all before moving to another group.
+  if (api.hasMaximizedGroup() && !next.group.api.isMaximized()) api.exitMaximizedGroup();
+  next.api.setActive();
+}
+
+/** The shortcuts that act on the active terminal (P5-06). */
+function useGridShortcuts(
+  api: DockviewApi | null,
+  actions: ProjectTerminals,
+  panels: Map<string, PanelControls>,
+): void {
+  const active = () => api?.activePanel;
+  const controls = () => {
+    const panel = active();
+    return panel ? panels.get(panel.id) : undefined;
+  };
+  const enabled = api !== null;
+  useShortcut(
+    'closeTerminal',
+    () => {
+      const panel = active();
+      if (panel) void actions.close(panel.id);
+    },
+    enabled,
+  );
+  useShortcut(
+    'toggleMaximize',
+    () => {
+      const panel = active();
+      if (panel) toggleMaximized(panel.group);
+    },
+    enabled,
+  );
+  useShortcut('nextPanel', () => api && cyclePanels(api, 1), enabled);
+  useShortcut('previousPanel', () => api && cyclePanels(api, -1), enabled);
+  useShortcut('find', () => controls()?.openSearch(), enabled);
+  useShortcut('copy', () => void controls()?.copy(), enabled);
+  useShortcut('paste', () => void controls()?.paste(), enabled);
+}
+
 export function TerminalGrid({
   terminals,
   watermark,
@@ -313,6 +375,7 @@ export function TerminalGrid({
   }, [api, list]);
 
   useLayoutSaving(api, terminals.saveLayout);
+  useGridShortcuts(api, terminals, panels);
 
   const context: GridContext = {
     terminals: new Map(list.map((t) => [t.id, t])),
@@ -422,14 +485,16 @@ function TerminalPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
         </div>
       </ContextMenuTrigger>
       {controls && (
-        <ContextMenuContent className="w-52" onCloseAutoFocus={(event) => event.preventDefault()}>
+        <ContextMenuContent className="w-64" onCloseAutoFocus={(event) => event.preventDefault()}>
           <ContextMenuItem disabled={!hasSelection} onSelect={() => void controls.copy()}>
             <Copy />
             Copy
+            <Kbd id="copy" />
           </ContextMenuItem>
           <ContextMenuItem onSelect={() => void controls.paste()}>
             <ClipboardPaste />
             Paste
+            <Kbd id="paste" />
           </ContextMenuItem>
           <ContextMenuItem onSelect={controls.selectAll}>
             <TextSelect />
@@ -439,6 +504,7 @@ function TerminalPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
           <ContextMenuItem onSelect={() => setSearching(true)}>
             <Search />
             Find
+            <Kbd id="find" />
           </ContextMenuItem>
           <ContextMenuItem onSelect={controls.clear}>
             <Eraser />
@@ -516,7 +582,7 @@ function TerminalTab({ api, containerApi, params }: IDockviewPanelHeaderProps<Pa
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent
-        className="w-52"
+        className="w-64"
         // Not back to the tab: Rename puts it in the title field, and the rest leave it be.
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
@@ -550,10 +616,12 @@ function TerminalTab({ api, containerApi, params }: IDockviewPanelHeaderProps<Pa
         >
           {maximized ? <Minimize2 /> : <Maximize2 />}
           {maximized ? 'Restore' : 'Maximize'}
+          <Kbd id="toggleMaximize" />
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" onSelect={close}>
           <X />
           {running ? 'Close (stops the process)' : 'Close'}
+          <Kbd id="closeTerminal" />
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -714,7 +782,7 @@ function GroupActions({ activePanel, group, containerApi }: IDockviewHeaderActio
     <div className="flex h-full items-center gap-0.5 px-1">
       <HeaderButton
         label="Find in terminal"
-        title="Find"
+        title={`Find (${shortcutLabel('find')})`}
         disabled={!hasScreen}
         onClick={() => controls()?.openSearch()}
       >
@@ -734,17 +802,19 @@ function GroupActions({ activePanel, group, containerApi }: IDockviewHeaderActio
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className="w-44"
+          className="w-56"
           // Focus stays in the terminal: Copy and Paste act on whatever has focus.
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
           <DropdownMenuItem disabled={!hasSelection} onSelect={() => void controls()?.copy()}>
             <Copy />
             Copy
+            <Kbd id="copy" />
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void controls()?.paste()}>
             <ClipboardPaste />
             Paste
+            <Kbd id="paste" />
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => controls()?.selectAll()}>
             <TextSelect />
@@ -779,7 +849,7 @@ function GroupActions({ activePanel, group, containerApi }: IDockviewHeaderActio
       </HeaderButton>
       <HeaderButton
         label={maximized ? 'Restore panel' : 'Maximize panel'}
-        title={maximized ? 'Restore (show all panels)' : 'Maximize'}
+        title={`${maximized ? 'Restore (show all panels)' : 'Maximize'} (${shortcutLabel('toggleMaximize')})`}
         onClick={() => toggleMaximized(group)}
       >
         {maximized ? <Minimize2 /> : <Maximize2 />}

@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
+import { shortcutLabel, useShortcut } from '@renderer/lib/shortcuts';
 import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 import { NewTerminalDialog } from '@renderer/features/terminals/NewTerminalDialog';
@@ -46,6 +47,8 @@ function ProjectView({ project }: { project: Project }) {
   const terminals = useProjectTerminals(project);
   const [adding, setAdding] = useState(false);
   const isArchived = project.status === 'archived';
+  useShortcut('newTerminal', () => void terminals.create(), !isArchived);
+  useShortcut('newTerminalDialog', () => setAdding(true), !isArchived);
 
   // Agents started from the sidebar open here. Archived projects don't run agents.
   const { registerLauncher } = agents;
@@ -99,7 +102,7 @@ function ProjectView({ project }: { project: Project }) {
             title={
               isArchived
                 ? 'Restore the project to open terminals'
-                : 'Open a shell or start an agent in a new panel'
+                : `Open a shell or start an agent in a new panel (${shortcutLabel('newTerminalDialog')})`
             }
             onClick={() => setAdding(true)}
           >

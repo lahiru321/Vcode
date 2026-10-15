@@ -25,6 +25,8 @@ const Timestamp = z.number().int().nonnegative();
 export const AppInfo = z.object({
   name: z.string(),
   version: z.string(),
+  /** For the renderer's keyboard shortcuts (Cmd on macOS, Ctrl elsewhere) and labels. */
+  platform: z.enum(['win32', 'darwin']),
   versions: z.object({
     electron: z.string(),
     chrome: z.string(),
