@@ -19,6 +19,7 @@ export const INVOKE_CHANNELS = [
   'credentials:list',
   'credentials:set',
   'credentials:delete',
+  'workspaces:list',
   'terminals:list',
   'terminals:create',
   'terminals:attach',

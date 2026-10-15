@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P5 — Multi-Terminal Workspace
 
 **Next up:**
-1. `P5-02` Add Terminal dialog: project → workspace → agent or plain shell
-2. `P5-03` Panel controls: close, maximize / restore, rename, rearrange, split
-3. `P5-04` Terminal toolbar: copy, paste, search, clear, stop, restart
+1. `P5-03` Panel controls: close, maximize / restore, rename, rearrange, split
+2. `P5-04` Terminal toolbar: copy, paste, search, clear, stop, restart
+3. `P5-05` Save the layout per project and restore it on launch
 
 ---
 
@@ -218,7 +218,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 
 - [x] **P5-01** · dockview grid for terminal panels · `M`
   - *2026-10-09:* `dockview-react` 8.4 (in v8 the React bindings moved out of `dockview` into `dockview-react`). `features/terminals/TerminalGrid.tsx` replaces the P2 tab strip. `useProjectTerminals` still says which terminals exist; dockview owns placement and the active panel (`activeId` removed from the hook). Panel id = terminal id; a sync effect adds/removes panels when the list changes. New terminals fill a balanced grid row by row, up to ⌈√n⌉ per row (2 → side by side, 4 → 2 × 2, 6 → 3 × 2, 9 → 3 × 3), and every add evens out row heights and widths (rows are read from the groups' on-screen positions, so it still works after you drag things around); the group's `+` opens one as a tab of that group instead. A restarted terminal takes its old panel's place (same group and tab index). Panels use `renderer: 'always'`, so xterm stays attached while its tab is hidden; `TerminalView`'s `active` prop is split into `visible` (refit) and `focused`. Custom tab: icon, title, status dot / agent badge, close (also middle click). Group header: restart + stop for the group's visible terminal. Floating groups off. `themeDark` recoloured to the app tokens in `styles.css`. Checked in the built app: grids at 2 / 3 / 4 / 6 / 9 terminals, typing, `+` in a group, stop one (others keep running), restart in place, close, reload (running terminals come back; layout isn't saved until P5-05).
-- [ ] **P5-02** · Add Terminal dialog: project → workspace → agent or plain shell · `M`
+- [x] **P5-02** · Add Terminal dialog: project → workspace → agent or plain shell · `M`
+  - *2026-10-15:* New channel `workspaces:list { projectId }`: the project's workspaces, `main` first (created if missing), then by name. `features/terminals/NewTerminalDialog.tsx`, opened by the header's **New terminal…**: project (active ones; starts on the one on screen), workspace (path shown below; a missing folder can't be picked), run (plain shell, or any agent available to that project: global or its own, with a "CLI not found" note), optional title. Errors (e.g. a missing CLI) show in the dialog; starting an agent reloads the agents list, so its recorded CLI status shows. Picking another project opens the terminal there and switches to that project. A group's `+` stays a one-click shell. `Field` moved to `lib/form.tsx`, and the three hand-styled `<select>`s became `components/ui/native-select.tsx`. Checked in the built app: shell with a title, a custom agent (status badge on its tab), a terminal in a second project (view switched to it), a missing CLI (error in the dialog, `not_found` recorded).
 - [ ] **P5-03** · Panel controls: close, maximize / restore, rename, rearrange, split · `M`
 - [ ] **P5-04** · Terminal toolbar: copy, paste, search, clear, stop, restart (needs clipboard access: all browser permissions are denied since P1-05, so allow clipboard for the app only or route it through IPC) · `S`
 - [ ] **P5-05** · Save the layout per project (`projects.layout_json`) and restore it on launch · `M`
@@ -365,3 +366,4 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-09** — **P3 First CLI Agent built** (P3-01 … P3-07). Agents run through `terminals:create { agentId }` rather than a separate start channel, following V1 doc §15. New `agent:status` event and `agents:list` / `agents:create` / `agents:validate` channels; migration `0001_agent_session_statuses`. Done-when checks pass in the built app except a fresh `/login`, which is left for the owner.
 - **2026-10-09** — **P4 Agent Registry built** (P4-01 … P4-07). New channels `agents:update` / `agents:delete` / `agents:providers` / `agents:detect` and `credentials:list` / `credentials:set` / `credentials:delete`; migration `0002_credential_env_var`; adapters declare `supportsInstructions` / `supportsModel` / `apiKeyEnv`. Fixed on the way: multi-line arguments to `.cmd` shims were cut at the first line break. Done-when passes in the built app except launching the real Gemini CLI and Codex CLI, left for the owner.
 - **2026-10-09** — **P4 done**: the owner launched the real Gemini CLI and Codex CLI in the app, completing the Done-when checks.
+- **2026-10-15** — P5-02 adds the `workspaces:list` channel (read-only; creating and deleting workspaces stays in P6-02).

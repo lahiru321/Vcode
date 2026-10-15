@@ -1,8 +1,8 @@
 import { IpcError } from '@vcode/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, ne } from 'drizzle-orm';
 import type { AppDatabase } from '../db';
 import { workspaces } from '../db/schema';
-import type { ProjectRow } from '../projects/service';
+import { getProject, type ProjectRow } from '../projects/service';
 
 // Workspaces (V1 doc §8, §17). For now only each project's `main` workspace — its root folder —
 // which terminals open in by default. Folder and Git worktree workspaces come in P6.
@@ -47,4 +47,16 @@ export function getWorkspace(db: AppDatabase, id: string, projectId: string): Wo
     throw new IpcError('NOT_FOUND', 'Workspace not found. It may have been deleted.');
   }
   return workspace;
+}
+
+/** The project's workspaces, `main` first (created if missing), then by name. */
+export function listWorkspaces(db: AppDatabase, projectId: string): WorkspaceRow[] {
+  const main = ensureMainWorkspace(db, getProject(db, projectId));
+  const others = db
+    .select()
+    .from(workspaces)
+    .where(and(eq(workspaces.projectId, projectId), ne(workspaces.kind, 'main')))
+    .orderBy(asc(workspaces.name))
+    .all();
+  return [main, ...others];
 }

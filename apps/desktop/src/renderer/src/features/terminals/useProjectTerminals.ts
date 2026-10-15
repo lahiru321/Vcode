@@ -7,13 +7,16 @@ import { toast } from 'sonner';
 // those opened since. Ended terminals stay (marked as ended) until they are closed. Where each one
 // is shown, and which is active, is up to the panel grid (TerminalGrid).
 
-const INITIAL_SIZE = { cols: 80, rows: 24 }; // replaced by the real size once the view fits
+/** Size a terminal is created at; replaced by the real size once its view fits. */
+export const INITIAL_SIZE = { cols: 80, rows: 24 };
 
 export interface ProjectTerminals {
   terminals: TerminalSession[];
   loaded: boolean;
   /** Opens a plain shell; resolves to the new terminal, or null if it could not be opened. */
   create: () => Promise<TerminalSession | null>;
+  /** Shows a terminal of this project that was opened elsewhere (the New terminal dialog). */
+  adopt: (terminal: TerminalSession) => void;
   /** Opens a terminal running Claude Code (P3-07). */
   startClaude: () => Promise<void>;
   /** Opens a terminal running `agent` (global, or one of this project's). */
@@ -175,6 +178,7 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     terminals,
     loaded,
     create,
+    adopt: open,
     startClaude,
     startAgent,
     stop,

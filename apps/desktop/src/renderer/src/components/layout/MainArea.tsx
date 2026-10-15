@@ -8,11 +8,12 @@ import {
   Plus,
   TerminalSquare,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
 import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
+import { NewTerminalDialog } from '@renderer/features/terminals/NewTerminalDialog';
 import { TerminalGrid } from '@renderer/features/terminals/TerminalGrid';
 import { useProjectTerminals } from '@renderer/features/terminals/useProjectTerminals';
 
@@ -36,9 +37,10 @@ export function MainArea() {
 }
 
 function ProjectView({ project }: { project: Project }) {
-  const { setArchived, startRename } = useProjects();
+  const { setArchived, startRename, select } = useProjects();
   const agents = useAgents();
   const terminals = useProjectTerminals(project);
+  const [adding, setAdding] = useState(false);
   const isArchived = project.status === 'archived';
 
   // Agents started from the sidebar open here. Archived projects don't run agents.
@@ -90,11 +92,15 @@ function ProjectView({ project }: { project: Project }) {
             size="sm"
             variant="secondary"
             disabled={isArchived}
-            title={isArchived ? 'Restore the project to open terminals' : undefined}
-            onClick={() => void terminals.create()}
+            title={
+              isArchived
+                ? 'Restore the project to open terminals'
+                : 'Open a shell or start an agent in a new panel'
+            }
+            onClick={() => setAdding(true)}
           >
             <TerminalSquare />
-            New terminal
+            New terminal…
           </Button>
           <Button
             size="sm"
@@ -118,6 +124,19 @@ function ProjectView({ project }: { project: Project }) {
       ) : (
         terminals.loaded && <NoTerminalsEmptyState />
       )}
+
+      <NewTerminalDialog
+        open={adding}
+        project={project}
+        onCreated={(terminal, projectId) => {
+          setAdding(false);
+          // Another project's terminal shows up when that project is opened.
+          if (projectId === project.id) terminals.adopt(terminal);
+          else select(projectId);
+        }}
+        onAgentLaunched={() => void agents.reload()}
+        onClose={() => setAdding(false)}
+      />
     </>
   );
 }

@@ -2,6 +2,7 @@ import type { AgentProvider, Credential, SetCredentialRequest } from '@vcode/sha
 import { useId } from 'react';
 import { Input } from '@renderer/components/ui/input';
 import { Label } from '@renderer/components/ui/label';
+import { NativeOption, NativeSelect } from '@renderer/components/ui/native-select';
 import { cn } from '@renderer/lib/utils';
 
 // The fields of an API key: name, provider, variable and the key itself. The key is typed in a
@@ -77,7 +78,7 @@ export function CredentialFields({
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor={`${ids}-provider`}>For</Label>
-          <select
+          <NativeSelect
             id={`${ids}-provider`}
             value={draft.provider}
             onChange={(event) => {
@@ -90,14 +91,13 @@ export function CredentialFields({
                 ...(followed || !draft.envVar ? { envVar: next.apiKeyEnv ?? '' } : {}),
               });
             }}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
           >
             {providers.map((p) => (
-              <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
+              <NativeOption key={p.id} value={p.id}>
                 {p.displayName}
-              </option>
+              </NativeOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       </div>
       <div className="grid gap-1.5">

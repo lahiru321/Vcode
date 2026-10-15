@@ -6,6 +6,7 @@ import { registerProjectHandlers } from './projects';
 import { assertAllChannelsHandled } from './registry';
 import { registerSettingsHandlers } from './settings';
 import { registerTerminalHandlers } from './terminals';
+import { registerWorkspaceHandlers } from './workspaces';
 
 export { broadcastEvent, sendEvent } from './registry';
 
@@ -18,5 +19,6 @@ export function registerIpcHandlers(): void {
   registerProjectHandlers();
   registerSettingsHandlers();
   registerTerminalHandlers();
+  registerWorkspaceHandlers();
   assertAllChannelsHandled();
 }

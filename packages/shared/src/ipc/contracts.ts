@@ -6,6 +6,8 @@ import {
   CREDENTIAL_STATUSES,
   PROJECT_STATUSES,
   SESSION_STATUSES,
+  WORKSPACE_KINDS,
+  WORKSPACE_STATUSES,
 } from '../domain';
 import { TERMINAL_COLS, TERMINAL_ROWS } from '../terminal-port';
 import type { EventChannel, InvokeChannel } from './channels';
@@ -218,6 +220,24 @@ export type SetCredentialRequest = z.infer<typeof SetCredentialRequest>;
 
 export const CredentialIdRequest = z.strictObject({ id: Id });
 
+// Workspaces (V1 doc §17): where a project's terminals run. Every project has a `main` one, its
+// root folder; folder and Git worktree workspaces come in P6.
+
+export const Workspace = z.object({
+  id: Id,
+  projectId: Id,
+  name: z.string(),
+  path: z.string(),
+  kind: z.enum(WORKSPACE_KINDS),
+  branch: z.string().nullable(),
+  status: z.enum(WORKSPACE_STATUSES),
+  createdAt: Timestamp,
+});
+export type Workspace = z.infer<typeof Workspace>;
+
+/** `main` first, then by name. */
+export const ListWorkspacesRequest = z.strictObject({ projectId: Id });
+
 // Terminals (V1 doc §11, §20). A terminal runs in a workspace; without `workspaceId` the
 // project's `main` workspace (its root folder) is used. Terminal data does not go through
 // these channels: each terminal gets its own MessagePort (P2-03). A terminal either runs a
@@ -329,6 +349,7 @@ export const invokeContracts = {
   'credentials:set': { request: SetCredentialRequest, response: Credential },
   /** Agents that used it go back to the CLI's own login. */
   'credentials:delete': { request: CredentialIdRequest, response: z.object({ id: Id }) },
+  'workspaces:list': { request: ListWorkspacesRequest, response: z.array(Workspace) },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
   'terminals:attach': {

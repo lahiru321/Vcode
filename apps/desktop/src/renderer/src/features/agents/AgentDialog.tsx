@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '@renderer/components/ui/dialog';
 import { Input } from '@renderer/components/ui/input';
-import { Label } from '@renderer/components/ui/label';
+import { NativeOption, NativeSelect } from '@renderer/components/ui/native-select';
 import { Textarea } from '@renderer/components/ui/textarea';
 import {
   CredentialFields,
@@ -28,7 +28,7 @@ import {
   toRequest,
   type CredentialDraft,
 } from '@renderer/features/credentials/CredentialForm';
-import { errorMessage, FormError, useSubmit } from '@renderer/lib/form';
+import { errorMessage, Field, FormError, useSubmit } from '@renderer/lib/form';
 import { invoke } from '@renderer/lib/ipc';
 import { cn } from '@renderer/lib/utils';
 
@@ -251,24 +251,19 @@ function AgentForm({
       <DialogHeading editing={editing} />
 
       <Field label="Provider" htmlFor={`${ids}-provider`}>
-        <select
+        <NativeSelect
           id={`${ids}-provider`}
           value={provider.id}
           disabled={editing}
           title={editing ? "An agent's provider can't be changed" : undefined}
           onChange={(event) => changeProvider(event.target.value)}
-          className={cn(
-            'h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none dark:bg-input/30',
-            'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-          )}
         >
           {options.map((p) => (
-            <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
+            <NativeOption key={p.id} value={p.id}>
               {p.displayName}
-            </option>
+            </NativeOption>
           ))}
-        </select>
+        </NativeSelect>
       </Field>
 
       <Field label="Name" htmlFor={`${ids}-name`}>
@@ -357,27 +352,19 @@ function AgentForm({
             : undefined
         }
       >
-        <select
+        <NativeSelect
           id={`${ids}-key`}
           value={keyChoice}
           onChange={(event) => setKeyChoice(event.target.value)}
-          className={cn(
-            'h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none dark:bg-input/30',
-            'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-          )}
         >
-          <option value="none" className="bg-popover text-popover-foreground">
-            None: use the CLI’s own login
-          </option>
+          <NativeOption value="none">None: use the CLI’s own login</NativeOption>
           {sortKeys(keys, provider.id).map((key) => (
-            <option key={key.id} value={key.id} className="bg-popover text-popover-foreground">
+            <NativeOption key={key.id} value={key.id}>
               {key.name} ({key.envVar}){key.status === 'unavailable' ? ' · can’t decrypt' : ''}
-            </option>
+            </NativeOption>
           ))}
-          <option value="new" className="bg-popover text-popover-foreground">
-            New API key…
-          </option>
-        </select>
+          <NativeOption value="new">New API key…</NativeOption>
+        </NativeSelect>
         {keyChoice === 'new' && (
           <CredentialFields
             draft={newKey}
@@ -471,30 +458,6 @@ function AgentForm({
         </Button>
       </DialogFooter>
     </form>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  labelId,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  labelId?: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-2">
-      <Label id={labelId} htmlFor={htmlFor}>
-        {label}
-      </Label>
-      {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
   );
 }
 
