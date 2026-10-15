@@ -26,6 +26,8 @@ interface NewTerminalDialogProps {
   open: boolean;
   /** The project on screen; the dialog starts with it selected. */
   project: Project;
+  /** The workspace to start with (one of `project`'s); its `main` one if not given. */
+  workspaceId?: string;
   /** Called once the terminal is running in `projectId`. */
   onCreated: (terminal: TerminalSession, projectId: string) => void;
   /** Called after an agent was started or failed to, since that records its CLI status. */
@@ -82,6 +84,7 @@ function agentLabel(agent: Agent): string {
 
 function NewTerminalForm({
   project,
+  workspaceId: initialWorkspaceId,
   onCreated,
   onAgentLaunched,
 }: Omit<NewTerminalDialogProps, 'open' | 'onClose'>) {
@@ -90,7 +93,7 @@ function NewTerminalForm({
   const [projectId, setProjectId] = useState(project.id);
   const choices = useChoices(projectId);
   // null: the project's first workspace (main) once loaded.
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(initialWorkspaceId ?? null);
   const [run, setRun] = useState(SHELL);
   const [title, setTitle] = useState('');
 

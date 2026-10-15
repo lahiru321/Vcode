@@ -10,10 +10,13 @@ import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { ApiKeysDialog } from '@renderer/features/credentials/ApiKeysDialog';
 import { ProjectList } from '@renderer/features/projects/ProjectList';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
+import { WorkspaceList } from '@renderer/features/workspaces/WorkspaceList';
+import { useWorkspaces } from '@renderer/features/workspaces/WorkspacesProvider';
 
 export function Sidebar() {
   const { startAdd, selected } = useProjects();
   const agents = useAgents();
+  const workspaces = useWorkspaces();
   const [keysOpen, setKeysOpen] = useState(false);
 
   return (
@@ -35,10 +38,16 @@ export function Sidebar() {
           <SidebarSection title="Agents" actionLabel="Add agent" onAction={agents.startAdd}>
             <AgentList />
           </SidebarSection>
-          <SidebarSection title="Workspaces">
-            <EmptyHint icon={<FolderPlus />}>
-              {selected ? 'No workspaces yet' : 'Select a project first'}
-            </EmptyHint>
+          <SidebarSection
+            title="Workspaces"
+            actionLabel="Add workspace"
+            onAction={selected?.status === 'active' ? workspaces.startCreate : undefined}
+          >
+            {selected ? (
+              <WorkspaceList />
+            ) : (
+              <EmptyHint icon={<FolderPlus />}>Select a project first</EmptyHint>
+            )}
           </SidebarSection>
         </nav>
       </ScrollArea>

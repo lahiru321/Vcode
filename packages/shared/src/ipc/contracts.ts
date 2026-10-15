@@ -262,7 +262,7 @@ export type Repository = z.infer<typeof Repository>;
 export const GetRepositoryRequest = z.strictObject({ projectId: Id });
 
 // Workspaces (V1 doc §17): where a project's terminals run. Every project has a `main` one, its
-// root folder; folder and Git worktree workspaces come in P6.
+// root folder. Folder workspaces since P6-03; Git worktrees with P6-04.
 
 export const Workspace = z.object({
   id: Id,
@@ -278,6 +278,26 @@ export type Workspace = z.infer<typeof Workspace>;
 
 /** `main` first, then by name. */
 export const ListWorkspacesRequest = z.strictObject({ projectId: Id });
+
+export const CreateWorkspaceRequest = z.strictObject({
+  projectId: Id,
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Name is required')
+    .max(60, 'Name is too long')
+    .refine((name) => /[a-z0-9]/i.test(name), 'Use at least one letter or digit'),
+  /** Git worktree workspaces come with P6-04. */
+  kind: z.literal('folder'),
+  /**
+   * An existing folder inside the project (absolute, or relative to its root). Without it a new
+   * folder `workspaces/<name>` is made.
+   */
+  path: z.string().trim().min(1, 'Folder is required').max(4096).optional(),
+});
+export type CreateWorkspaceRequest = z.infer<typeof CreateWorkspaceRequest>;
+
+export const WorkspaceIdRequest = z.strictObject({ id: Id });
 
 // Terminals (V1 doc §11, §20). A terminal runs in a workspace; without `workspaceId` the
 // project's `main` workspace (its root folder) is used. Terminal data does not go through
@@ -415,7 +435,12 @@ export const invokeContracts = {
    * null if its folder isn't a Git repository root.
    */
   'repositories:get': { request: GetRepositoryRequest, response: Repository.nullable() },
+  /** Each folder is checked on the way: `status` is `missing` / `error` if it can't be used. */
   'workspaces:list': { request: ListWorkspacesRequest, response: z.array(Workspace) },
+  /** CONFLICT if the name or folder is taken; INVALID_REQUEST for a folder outside the project. */
+  'workspaces:create': { request: CreateWorkspaceRequest, response: Workspace },
+  /** Removes the record, never files. CONFLICT for `main` and while a terminal runs in it. */
+  'workspaces:delete': { request: WorkspaceIdRequest, response: z.object({ id: Id }) },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
   'terminals:attach': {

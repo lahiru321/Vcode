@@ -34,7 +34,7 @@ describe('repositories', () => {
         defaultBranch: 'main',
       }),
     ]);
-    const [main] = listWorkspaces(db, project.id);
+    const [main] = await listWorkspaces(db, project.id);
     expect(main).toMatchObject({ repositoryId: expect.any(String), branch: 'main' });
   });
 
@@ -49,13 +49,13 @@ describe('repositories', () => {
     const db = testDatabase();
     const root = tempDir();
     const project = await createProject(db, { rootPath: root });
-    listWorkspaces(db, project.id);
+    await listWorkspaces(db, project.id);
 
     makeRepo(root, 'dev');
     const first = await getRepository(db, project.id);
     expect(first).toMatchObject({ remoteUrl: null, defaultBranch: 'dev' });
     expect(getProject(db, project.id).defaultBranch).toBe('dev');
-    expect(listWorkspaces(db, project.id)[0]).toMatchObject({
+    expect((await listWorkspaces(db, project.id))[0]).toMatchObject({
       repositoryId: first!.id,
       branch: 'dev',
     });
@@ -75,12 +75,15 @@ describe('repositories', () => {
     const root = tempDir();
     makeRepo(root, 'main');
     const project = await createProject(db, { rootPath: root });
-    listWorkspaces(db, project.id);
+    await listWorkspaces(db, project.id);
 
     rmSync(join(root, '.git'), { recursive: true });
     await expect(getRepository(db, project.id)).resolves.toBeNull();
     expect(getProject(db, project.id).defaultBranch).toBeNull();
-    expect(listWorkspaces(db, project.id)[0]).toMatchObject({ repositoryId: null, branch: null });
+    expect((await listWorkspaces(db, project.id))[0]).toMatchObject({
+      repositoryId: null,
+      branch: null,
+    });
     expect(
       db.select().from(repositories).where(eq(repositories.projectId, project.id)).all(),
     ).toEqual([]);

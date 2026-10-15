@@ -22,7 +22,8 @@ export interface ProjectTerminals {
   /** Saves the grid for the next time the project opens. */
   saveLayout: (layout: JsonValue | null) => void;
   /** Opens a plain shell; resolves to the new terminal, or null if it could not be opened. */
-  create: () => Promise<TerminalSession | null>;
+  /** A plain shell, in `workspaceId` or the project's main workspace. */
+  create: (workspaceId?: string) => Promise<TerminalSession | null>;
   /** Shows a terminal of this project that was opened elsewhere (the New terminal dialog). */
   adopt: (terminal: TerminalSession) => void;
   /** Opens a terminal running Claude Code (P3-07). */
@@ -125,14 +126,19 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     return terminal;
   }, []);
 
-  const create = useCallback(async () => {
-    try {
-      return open(await invoke('terminals:create', { projectId: project.id, ...INITIAL_SIZE }));
-    } catch (error) {
-      toast.error('Could not open a terminal', { description: errorMessage(error) });
-      return null;
-    }
-  }, [project.id, open]);
+  const create = useCallback(
+    async (workspaceId?: string) => {
+      try {
+        return open(
+          await invoke('terminals:create', { projectId: project.id, workspaceId, ...INITIAL_SIZE }),
+        );
+      } catch (error) {
+        toast.error('Could not open a terminal', { description: errorMessage(error) });
+        return null;
+      }
+    },
+    [project.id, open],
+  );
 
   const launch = useCallback(
     async (agent: Agent) =>

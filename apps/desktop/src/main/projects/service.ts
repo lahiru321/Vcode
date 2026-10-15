@@ -1,6 +1,7 @@
 import { basename } from 'node:path';
 import {
   IpcError,
+  slugify,
   type CreateProjectRequest,
   type JsonValue,
   type ProjectStatus,
@@ -19,19 +20,8 @@ export type ProjectRow = typeof projects.$inferSelect;
 type Queryable = Pick<AppDatabase, 'select'>;
 
 const MAX_NAME_LENGTH = 100;
-const MAX_SLUG_LENGTH = 48;
 
-/** "My Shop (v2)" → "my-shop-v2". Accents are dropped; anything else non-alphanumeric is a dash. */
-export function slugify(name: string): string {
-  const slug = name
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .slice(0, MAX_SLUG_LENGTH)
-    .replace(/^-+|-+$/g, '');
-  return slug || 'project';
-}
+export { slugify };
 
 /** `slugify(name)`, with -2, -3, … appended if another project already uses it. */
 function uniqueSlug(db: Queryable, name: string): string {

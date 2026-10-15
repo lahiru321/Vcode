@@ -16,6 +16,7 @@ import { shortcutLabel, useShortcut } from '@renderer/lib/shortcuts';
 import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 import { useRepository } from '@renderer/features/projects/useRepository';
+import { useWorkspaces } from '@renderer/features/workspaces/WorkspacesProvider';
 import { NewTerminalDialog } from '@renderer/features/terminals/NewTerminalDialog';
 import { TerminalGrid } from '@renderer/features/terminals/TerminalGrid';
 import {
@@ -47,10 +48,11 @@ function ProjectView({ project }: { project: Project }) {
   const agents = useAgents();
   const terminals = useProjectTerminals(project);
   const repository = useRepository(project);
-  const [adding, setAdding] = useState(false);
+  // Open: the New terminal dialog, starting in `workspaceId` (or main) when given.
+  const [adding, setAdding] = useState<{ workspaceId?: string } | null>(null);
   const isArchived = project.status === 'archived';
   useShortcut('newTerminal', () => void terminals.create(), !isArchived);
-  useShortcut('newTerminalDialog', () => setAdding(true), !isArchived);
+  useShortcut('newTerminalDialog', () => setAdding({}), !isArchived);
 
   // Agents started from the sidebar open here. Archived projects don't run agents.
   const { registerLauncher } = agents;
@@ -58,6 +60,20 @@ function ProjectView({ project }: { project: Project }) {
   useEffect(
     () => (isArchived ? undefined : registerLauncher(startAgent)),
     [isArchived, registerLauncher, startAgent],
+  );
+
+  // …and so do terminals opened from the sidebar's workspace rows (P6-02).
+  const { registerLauncher: registerWorkspaceLauncher } = useWorkspaces();
+  const { create } = terminals;
+  useEffect(
+    () =>
+      isArchived
+        ? undefined
+        : registerWorkspaceLauncher({
+            openShell: async (workspace) => void (await create(workspace.id)),
+            openDialog: (workspace) => setAdding({ workspaceId: workspace.id }),
+          }),
+    [isArchived, registerWorkspaceLauncher, create],
   );
 
   return (
@@ -114,7 +130,7 @@ function ProjectView({ project }: { project: Project }) {
                 ? 'Restore the project to open terminals'
                 : `Open a shell or start an agent in a new panel (${shortcutLabel('newTerminalDialog')})`
             }
-            onClick={() => setAdding(true)}
+            onClick={() => setAdding({})}
           >
             <TerminalSquare />
             New terminal…
@@ -141,16 +157,17 @@ function ProjectView({ project }: { project: Project }) {
       {terminals.loaded && <TerminalGrid terminals={terminals} watermark={NoTerminalsEmptyState} />}
 
       <NewTerminalDialog
-        open={adding}
+        open={adding !== null}
         project={project}
+        workspaceId={adding?.workspaceId}
         onCreated={(terminal, projectId) => {
-          setAdding(false);
+          setAdding(null);
           // Another project's terminal shows up when that project is opened.
           if (projectId === project.id) terminals.adopt(terminal);
           else select(projectId);
         }}
         onAgentLaunched={() => void agents.reload()}
-        onClose={() => setAdding(false)}
+        onClose={() => setAdding(null)}
       />
     </>
   );
