@@ -1,7 +1,7 @@
 import { IpcError } from '@vcode/shared';
 import { and, asc, eq, ne } from 'drizzle-orm';
 import type { AppDatabase } from '../db';
-import { workspaces } from '../db/schema';
+import { repositories, workspaces } from '../db/schema';
 import { getProject, type ProjectRow } from '../projects/service';
 
 // Workspaces (V1 doc §8, §17). For now only each project's `main` workspace — its root folder —
@@ -22,6 +22,11 @@ export function ensureMainWorkspace(db: AppDatabase, project: ProjectRow): Works
     if (existing) {
       return existing;
     }
+    const repository = tx
+      .select({ id: repositories.id })
+      .from(repositories)
+      .where(eq(repositories.projectId, project.id))
+      .get();
     return tx
       .insert(workspaces)
       .values({
@@ -29,6 +34,7 @@ export function ensureMainWorkspace(db: AppDatabase, project: ProjectRow): Works
         name: MAIN_WORKSPACE_NAME,
         path: project.rootPath,
         kind: 'main',
+        repositoryId: repository?.id ?? null,
         branch: project.defaultBranch,
       })
       .returning()

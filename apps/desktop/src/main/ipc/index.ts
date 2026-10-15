@@ -5,6 +5,7 @@ import { registerCredentialHandlers } from './credentials';
 import { registerDialogHandlers } from './dialog';
 import { registerProjectHandlers } from './projects';
 import { assertAllChannelsHandled } from './registry';
+import { registerRepositoryHandlers } from './repositories';
 import { registerSettingsHandlers } from './settings';
 import { registerTerminalHandlers } from './terminals';
 import { registerWorkspaceHandlers } from './workspaces';
@@ -19,6 +20,7 @@ export function registerIpcHandlers(): void {
   registerCredentialHandlers();
   registerDialogHandlers();
   registerProjectHandlers();
+  registerRepositoryHandlers();
   registerSettingsHandlers();
   registerTerminalHandlers();
   registerWorkspaceHandlers();

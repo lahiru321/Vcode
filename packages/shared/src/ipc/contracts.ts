@@ -244,6 +244,23 @@ export type SetCredentialRequest = z.infer<typeof SetCredentialRequest>;
 
 export const CredentialIdRequest = z.strictObject({ id: Id });
 
+// Repositories (V1 doc §8): the Git repository at a project's root. Detected from its `.git`
+// files each time it is asked for, so a folder that became a repository later is picked up.
+
+export const Repository = z.object({
+  id: Id,
+  projectId: Id,
+  /** origin's URL (or another remote's), without any user name / token in it. */
+  remoteUrl: z.string().nullable(),
+  localPath: z.string(),
+  /** origin's default branch if known, otherwise the checked-out branch. */
+  defaultBranch: z.string().nullable(),
+  createdAt: Timestamp,
+});
+export type Repository = z.infer<typeof Repository>;
+
+export const GetRepositoryRequest = z.strictObject({ projectId: Id });
+
 // Workspaces (V1 doc §17): where a project's terminals run. Every project has a `main` one, its
 // root folder; folder and Git worktree workspaces come in P6.
 
@@ -393,6 +410,11 @@ export const invokeContracts = {
   'credentials:set': { request: SetCredentialRequest, response: Credential },
   /** Agents that used it go back to the CLI's own login. */
   'credentials:delete': { request: CredentialIdRequest, response: z.object({ id: Id }) },
+  /**
+   * Detects the project's repository again and updates the project's default branch to match;
+   * null if its folder isn't a Git repository root.
+   */
+  'repositories:get': { request: GetRepositoryRequest, response: Repository.nullable() },
   'workspaces:list': { request: ListWorkspacesRequest, response: z.array(Workspace) },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },

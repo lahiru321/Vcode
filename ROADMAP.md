@@ -31,12 +31,12 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P5 — Multi-Terminal Workspace
+**Current phase:** P6 — Workspace & Git (P5 waiting for the owner's Done-when check)
 
 **Next up:**
 1. P5 Done-when check by the owner: 4+ agents at once in one project, the layout back after an app restart, stopping one leaves the others running
-2. `P6-01` Repository link / detection: remote URL, local path, default branch
-3. `P6-02` Workspace manager UI: list, create, delete
+2. `P6-05` Path guards: every workspace must resolve inside the project root (no symlink escapes)
+3. `P6-02` / `P6-03` Workspace manager UI + folder workspaces
 
 ---
 
@@ -49,7 +49,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | Built; owner check |
-| P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | To do |
+| P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | In progress |
 | P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | To do |
 | P8 | Distribution | Signed Windows installer with auto-update | M | To do |
 | — | macOS Release | Same app on macOS | M | After V1 |
@@ -243,7 +243,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 **Goal:** each agent works in its own folder or Git worktree.
 **Depends on:** P1, P3.
 
-- [ ] **P6-01** · Repository link / detection: remote URL, local path, default branch · `S`
+- [x] **P6-01** · Repository link / detection: remote URL, local path, default branch · `S`
+  - *2026-10-15:* `git/detect.ts` now also returns the checked-out `branch` and `remoteUrl`: origin's `url` from the shared git dir's `config` (a linked worktree reads its main repository's), another remote's if there's no origin; still no `git` process. Credentials are stripped (`https://user:token@host` → `https://host`; for other schemes only a password goes). `src/main/repositories/service.ts`: one `repositories` row per project (local path = project root), written when the project is created and again by the new channel **`repositories:get { projectId }`**, which detects afresh each call — a folder that became a repository, changed branch or lost its `.git` after it was added is picked up (row created / updated in place / deleted). The same step keeps `projects.default_branch` and the `main` workspace's `repository_id` + checked-out `branch` in line. The project view calls it on open (`useRepository`) and reloads the project list if the default branch changed; the header's branch badge shows the remote URL as its tooltip. Checked in the built app: this repo → `main` + `https://github.com/lahiru321/Vcode.git`; a plain-folder project given a `.git` with `https://bob:ghp_…@github.com/bob/x.git` → `trunk`, remote without the token, main workspace on `trunk`, badge "trunk" with the remote.
 - [ ] **P6-02** · Workspace manager UI: list, create, delete · `M`
 - [ ] **P6-03** · Folder workspaces · `S`
 - [ ] **P6-04** · Git worktree workspaces: create branch + worktree under `workspaces/`, remove safely (warn on uncommitted changes) · `L`
@@ -376,3 +377,4 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-15** — P5-04 adds `clipboard:writeText` and `clipboard:paste` rather than allowing clipboard permissions for the page.
 - **2026-10-15** — P5-05: on relaunch the saved layout comes back with ended panels and a Restart button; nothing starts by itself (owner's decision).
 - **2026-10-15** — **P5 Multi-Terminal Workspace built** (P5-01 … P5-07). New channels `workspaces:list`, `terminals:rename`, `clipboard:writeText` / `clipboard:paste`, `projects:getLayout` / `projects:saveLayout`, `agents:sessions`; `app:getInfo` returns the platform. Done-when checks are left for the owner.
+- **2026-10-15** — P6-01 adds the `repositories:get` channel (not in V1 doc §20's list): it re-detects the repository each call rather than only at project creation.

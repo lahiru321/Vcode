@@ -11,6 +11,7 @@ import type { AppDatabase } from '../db';
 import { projects } from '../db/schema';
 import { resolveExistingFolder } from '../fs/folders';
 import { detectGitRepository } from '../git/detect';
+import { recordGitInfo } from '../repositories/service';
 
 // Project CRUD (V1 doc §18 "projects"). Functions take the database so tests can pass their own.
 
@@ -96,7 +97,7 @@ export async function createProject(
     if (existing) {
       throw new IpcError('CONFLICT', `This folder is already the project “${existing.name}”.`);
     }
-    return tx
+    const project = tx
       .insert(projects)
       .values({
         name,
@@ -106,6 +107,8 @@ export async function createProject(
       })
       .returning()
       .get();
+    recordGitInfo(tx, project, git);
+    return project;
   });
 }
 

@@ -15,6 +15,7 @@ import { Button } from '@renderer/components/ui/button';
 import { shortcutLabel, useShortcut } from '@renderer/lib/shortcuts';
 import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
+import { useRepository } from '@renderer/features/projects/useRepository';
 import { NewTerminalDialog } from '@renderer/features/terminals/NewTerminalDialog';
 import { TerminalGrid } from '@renderer/features/terminals/TerminalGrid';
 import {
@@ -45,6 +46,7 @@ function ProjectView({ project }: { project: Project }) {
   const { setArchived, startRename, select } = useProjects();
   const agents = useAgents();
   const terminals = useProjectTerminals(project);
+  const repository = useRepository(project);
   const [adding, setAdding] = useState(false);
   const isArchived = project.status === 'archived';
   useShortcut('newTerminal', () => void terminals.create(), !isArchived);
@@ -70,7 +72,15 @@ function ProjectView({ project }: { project: Project }) {
             {project.name}
           </h1>
           {project.defaultBranch && (
-            <Badge variant="secondary" className="shrink-0 gap-1 font-mono font-normal">
+            <Badge
+              variant="secondary"
+              className="shrink-0 gap-1 font-mono font-normal"
+              title={
+                repository?.remoteUrl
+                  ? `Default branch · ${repository.remoteUrl}`
+                  : 'Default branch (no remote)'
+              }
+            >
               <GitBranch />
               {project.defaultBranch}
             </Badge>

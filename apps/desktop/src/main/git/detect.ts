@@ -34,9 +34,59 @@ function branchFromRef(content: string | null, prefix: string): string | null {
   return ref?.startsWith(prefix) ? ref.slice(prefix.length) || null : null;
 }
 
+/** A git config value: unquoted and unescaped, or with a trailing `#` / `;` comment dropped. */
+function configValue(raw: string): string {
+  const value = raw.trim();
+  if (value.startsWith('"')) {
+    const quoted = value.match(/^"((?:[^"\\]|\\.)*)"/);
+    return (quoted?.[1] ?? value.slice(1)).replace(/\\(.)/g, '$1');
+  }
+  return value.replace(/\s*[#;].*$/, '');
+}
+
+/** `url` of each `[remote "name"]` section in a git config file, in file order. */
+export function parseRemoteUrls(config: string): Map<string, string> {
+  const urls = new Map<string, string>();
+  let remote: string | null = null;
+  for (const line of config.split(/\r?\n/)) {
+    const section = line.match(/^\s*\[\s*([^\]\s"]+)(?:\s+"((?:[^"\\]|\\.)*)")?\s*\]/);
+    if (section) {
+      remote = section[1]!.toLowerCase() === 'remote' ? (section[2] ?? null) : null;
+      continue;
+    }
+    const entry = remote === null ? null : line.match(/^\s*url\s*=(.*)$/i);
+    if (remote !== null && entry && !urls.has(remote)) {
+      urls.set(remote, configValue(entry[1]!));
+    }
+  }
+  return urls;
+}
+
+/**
+ * A remote URL without its credentials: `https://user:token@host/…` → `https://host/…`. For
+ * other schemes (ssh://git@host) the user name stays and only a password goes. scp-style
+ * `git@host:path` has no password and is kept as is.
+ */
+export function stripCredentials(url: string): string {
+  const match = url.match(/^([a-z][a-z0-9+.-]*:\/\/)([^/@]*)@(.*)$/i);
+  if (!match) {
+    return url;
+  }
+  const [, scheme, userInfo, rest] = match as unknown as [string, string, string, string];
+  if (/^https?:\/\/$/i.test(scheme)) {
+    return scheme + rest;
+  }
+  const user = userInfo.split(':')[0];
+  return user ? `${scheme}${user}@${rest}` : scheme + rest;
+}
+
 export interface GitInfo {
   /** origin's default branch if known, otherwise the checked-out branch; null if detached. */
   defaultBranch: string | null;
+  /** The checked-out branch; null if detached. */
+  branch: string | null;
+  /** origin's URL (another remote's if there's no origin) without credentials; null if none. */
+  remoteUrl: string | null;
 }
 
 /** Git info for a repository rooted at `folder`, or null if `folder` isn't a repository root. */
@@ -54,8 +104,12 @@ export async function detectGitRepository(folder: string): Promise<GitInfo | nul
   if (head === null) {
     return null;
   }
+  const branch = branchFromRef(head, 'refs/heads/');
+  const remotes = parseRemoteUrls((await readTrimmed(join(sharedDir, 'config'))) ?? '');
+  const remoteUrl = remotes.get('origin') ?? remotes.values().next().value ?? null;
   return {
-    defaultBranch:
-      branchFromRef(originHead, 'refs/remotes/origin/') ?? branchFromRef(head, 'refs/heads/'),
+    defaultBranch: branchFromRef(originHead, 'refs/remotes/origin/') ?? branch,
+    branch,
+    remoteUrl: remoteUrl ? stripCredentials(remoteUrl) : null,
   };
 }
