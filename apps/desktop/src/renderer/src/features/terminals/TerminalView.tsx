@@ -4,10 +4,11 @@ import {
   type TerminalClientMessage,
   type TerminalHostMessage,
 } from '@vcode/shared';
+import { invoke } from '@renderer/lib/ipc';
 import { openTerminalPort } from '@renderer/lib/terminal-port';
 import { blockClipboardSequences, confirmedLinkHandler } from './safety';
 import { FitAddon } from '@xterm/addon-fit';
-import { SearchAddon } from '@xterm/addon-search';
+import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal, type ITheme } from '@xterm/xterm';
@@ -47,6 +48,61 @@ function openLink(uri: string): void {
   window.open(uri);
 }
 
+/** Search matches: all highlighted, the current one stronger (VS Code's find colours). */
+const SEARCH_DECORATIONS: ISearchOptions['decorations'] = {
+  matchBackground: '#623315',
+  matchOverviewRuler: '#d18616',
+  activeMatchBackground: '#515c6a',
+  activeMatchBorder: '#e5e5e5',
+  activeMatchColorOverviewRuler: '#e5e5e5',
+};
+
+export interface SearchQuery {
+  term: string;
+  caseSensitive: boolean;
+  /** While typing: keep the current match if it still matches, rather than move on. */
+  incremental?: boolean;
+}
+
+/** `index` is -1 when there are too many matches to number them. */
+export interface SearchResults {
+  index: number;
+  count: number;
+}
+
+/** What the toolbar and menus do to a terminal (P5-04). */
+export interface TerminalControls {
+  hasSelection: () => boolean;
+  /** Puts the selection on the clipboard. */
+  copy: () => Promise<void>;
+  /** Types the clipboard's text into the terminal (bracketed paste if the program asks for it);
+   * it takes focus first. */
+  paste: () => Promise<void>;
+  selectAll: () => void;
+  /** Clears the screen and scrollback in the view; the program keeps running. */
+  clear: () => void;
+  focus: () => void;
+  /** Selects the next / previous match; returns whether there is one. */
+  findNext: (query: SearchQuery) => boolean;
+  findPrevious: (query: SearchQuery) => boolean;
+  clearSearch: () => void;
+  onSearchResults: (listener: (results: SearchResults) => void) => () => void;
+}
+
+/**
+ * Focuses the terminal and waits until it has focus. Called from a menu, focus only sticks once
+ * the menu has closed (its focus trap pulls focus back until then). False if it never does.
+ */
+async function takeFocus(terminal: Terminal): Promise<boolean> {
+  const has = () => document.activeElement === terminal.textarea;
+  for (let frame = 0; frame < 30 && !has(); frame++) {
+    terminal.focus();
+    if (has()) break;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+  return has();
+}
+
 const FONT_FAMILY =
   "'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, 'DejaVu Sans Mono', monospace";
 
@@ -57,15 +113,25 @@ interface TerminalViewProps {
   /** The active panel: it takes keyboard focus when this turns on. */
   focused: boolean;
   onExit: (exitCode: number) => void;
+  /** Called with the terminal's controls once it is created, and with null when it goes. */
+  onControls?: (controls: TerminalControls | null) => void;
 }
 
-export function TerminalView({ terminalId, visible, focused, onExit }: TerminalViewProps) {
+export function TerminalView({
+  terminalId,
+  visible,
+  focused,
+  onExit,
+  onControls,
+}: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<(() => void) | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const onExitRef = useRef(onExit);
+  const onControlsRef = useRef(onControls);
   useEffect(() => {
     onExitRef.current = onExit;
+    onControlsRef.current = onControls;
   });
 
   useEffect(() => {
@@ -82,11 +148,13 @@ export function TerminalView({ terminalId, visible, focused, onExit }: TerminalV
       scrollback: TERMINAL_SCROLLBACK,
       theme: THEME,
       linkHandler: confirmedLinkHandler(openLink),
+      allowProposedApi: true, // search match decorations
     });
     blockClipboardSequences(terminal);
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new SearchAddon());
+    const search = new SearchAddon();
+    terminal.loadAddon(search);
     terminal.loadAddon(new WebLinksAddon((_event, uri) => openLink(uri)));
     terminal.open(container);
     try {
@@ -98,6 +166,36 @@ export function TerminalView({ terminalId, visible, focused, onExit }: TerminalV
       // No WebGL: the DOM renderer is used.
     }
     terminalRef.current = terminal;
+
+    const searchOptions = (query: SearchQuery): ISearchOptions => ({
+      caseSensitive: query.caseSensitive,
+      incremental: query.incremental,
+      decorations: SEARCH_DECORATIONS,
+    });
+    onControlsRef.current?.({
+      hasSelection: () => terminal.hasSelection(),
+      copy: async () => {
+        if (terminal.hasSelection()) {
+          await invoke('clipboard:writeText', { text: terminal.getSelection() });
+        }
+      },
+      // Main runs Edit → Paste on this window, which goes to whatever has focus.
+      paste: async () => {
+        if (await takeFocus(terminal)) await invoke('clipboard:paste');
+      },
+      selectAll: () => terminal.selectAll(),
+      clear: () => terminal.clear(),
+      focus: () => terminal.focus(),
+      findNext: (query) => search.findNext(query.term, searchOptions(query)),
+      findPrevious: (query) => search.findPrevious(query.term, searchOptions(query)),
+      clearSearch: () => search.clearDecorations(),
+      onSearchResults: (listener) => {
+        const subscription = search.onDidChangeResults((event) =>
+          listener({ index: event.resultIndex, count: event.resultCount }),
+        );
+        return () => subscription.dispose();
+      },
+    });
 
     let port: MessagePort | null = null;
     let disposed = false;
@@ -168,6 +266,7 @@ export function TerminalView({ terminalId, visible, focused, onExit }: TerminalV
       observer.disconnect();
       input.dispose();
       port?.close();
+      onControlsRef.current?.(null);
       terminal.dispose();
       terminalRef.current = null;
       fitRef.current = null;

@@ -7,6 +7,13 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu';
 import { AgentStatusBadge } from '@renderer/features/agents/AgentStatusBadge';
 import { cn } from '@renderer/lib/utils';
 import {
@@ -25,6 +32,10 @@ import {
   ArrowDownToLine,
   ArrowRightToLine,
   Bot,
+  ClipboardPaste,
+  Copy,
+  Ellipsis,
+  Eraser,
   Maximize2,
   Minimize2,
   Pencil,
@@ -32,22 +43,37 @@ import {
   RotateCw,
   Rows2,
   Columns2,
+  Search,
   Square,
   TerminalSquare,
+  TextSelect,
   X,
 } from 'lucide-react';
-import { createContext, use, useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { TerminalView } from './TerminalView';
+import {
+  createContext,
+  use,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type KeyboardEvent,
+} from 'react';
+import { TerminalSearch } from './TerminalSearch';
+import { TerminalView, type TerminalControls } from './TerminalView';
 import type { ProjectTerminals } from './useProjectTerminals';
 
 // The project's terminals as panels in a dockview grid (P5-01). The terminal list in
 // useProjectTerminals says which terminals exist; dockview owns where each one is shown and
 // which is active. Panel ids are terminal ids. Each tab has a right-click menu (P5-03): rename,
-// split, move to a new group, maximize, close.
+// split, move to a new group, maximize, close. Inside a terminal, right-click has copy, paste,
+// select all, find and clear; the group header has find, clear and the rest (P5-04).
 
 interface PanelParams {
   terminalId: string;
 }
+
+/** A terminal's controls, plus opening its find bar. */
+type PanelControls = TerminalControls & { openSearch: () => void };
 
 /** Where the next new terminal goes: a tab of `group`, or a new group beside it. */
 interface Target {
@@ -60,6 +86,8 @@ interface GridContext {
   actions: ProjectTerminals;
   /** Opens a new shell as a tab of `group`, or in a new group to its right or below it. */
   createAt: (group: DockviewGroupPanel, direction: Target['direction']) => void;
+  /** Each mounted terminal's controls, by terminal id. */
+  panels: Map<string, PanelControls>;
 }
 
 const GridContext = createContext<GridContext | null>(null);
@@ -219,6 +247,7 @@ export function TerminalGrid({ terminals }: { terminals: ProjectTerminals }) {
   const previousIds = useRef<readonly string[]>([]);
   // Set by a group's "+" or a split while its terminal is being created.
   const target = useRef<Target | null>(null);
+  const [panels] = useState(() => new Map<string, PanelControls>());
 
   const list = terminals.terminals;
   useEffect(() => {
@@ -232,6 +261,7 @@ export function TerminalGrid({ terminals }: { terminals: ProjectTerminals }) {
   const context: GridContext = {
     terminals: new Map(list.map((t) => [t.id, t])),
     actions: terminals,
+    panels,
     createAt: (group, direction) => {
       target.current = { group, direction };
       void terminals.create().then((created) => {
@@ -257,9 +287,13 @@ export function TerminalGrid({ terminals }: { terminals: ProjectTerminals }) {
 }
 
 function TerminalPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
-  const { actions } = useGrid();
+  const { actions, panels } = useGrid();
   const [visible, setVisible] = useState(api.isVisible);
   const [active, setActive] = useState(api.isActive);
+  const [controls, setControls] = useState<TerminalControls | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [hasSelection, setHasSelection] = useState(false);
+  const { terminalId } = params;
 
   useEffect(() => {
     const subscriptions = [
@@ -269,14 +303,59 @@ function TerminalPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
     return () => subscriptions.forEach((s) => s.dispose());
   }, [api]);
 
+  // The group header's buttons reach this terminal through `panels`.
+  useEffect(() => {
+    if (!controls) return;
+    panels.set(terminalId, { ...controls, openSearch: () => setSearching(true) });
+    return () => void panels.delete(terminalId);
+  }, [panels, terminalId, controls]);
+
   const { markExited } = actions;
   return (
-    <TerminalView
-      terminalId={params.terminalId}
-      visible={visible}
-      focused={active}
-      onExit={(exitCode) => markExited(params.terminalId, exitCode)}
-    />
+    <ContextMenu
+      // Copy is offered only with a selection, checked as the menu opens.
+      onOpenChange={(open) => open && setHasSelection(controls?.hasSelection() ?? false)}
+    >
+      <ContextMenuTrigger asChild>
+        <div className="relative size-full">
+          <TerminalView
+            terminalId={terminalId}
+            visible={visible}
+            focused={active}
+            onExit={(exitCode) => markExited(terminalId, exitCode)}
+            onControls={setControls}
+          />
+          {searching && controls && (
+            <TerminalSearch controls={controls} onClose={() => setSearching(false)} />
+          )}
+        </div>
+      </ContextMenuTrigger>
+      {controls && (
+        <ContextMenuContent className="w-52" onCloseAutoFocus={(event) => event.preventDefault()}>
+          <ContextMenuItem disabled={!hasSelection} onSelect={() => void controls.copy()}>
+            <Copy />
+            Copy
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => void controls.paste()}>
+            <ClipboardPaste />
+            Paste
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={controls.selectAll}>
+            <TextSelect />
+            Select all
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => setSearching(true)}>
+            <Search />
+            Find
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={controls.clear}>
+            <Eraser />
+            Clear
+          </ContextMenuItem>
+        </ContextMenuContent>
+      )}
+    </ContextMenu>
   );
 }
 
@@ -511,45 +590,98 @@ function NewTerminalAction({ group }: IDockviewHeaderActionsProps) {
   );
 }
 
+function HeaderButton({
+  label,
+  title,
+  ...props
+}: ComponentProps<typeof Button> & { label: string; title: string }) {
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      className="size-6"
+      aria-label={label}
+      title={title}
+      {...props}
+    />
+  );
+}
+
+/** The group's toolbar, acting on its visible terminal (P5-04). */
 function GroupActions({ activePanel, group, containerApi }: IDockviewHeaderActionsProps) {
-  const { terminals, actions } = useGrid();
+  const { terminals, actions, panels } = useGrid();
   const maximized = useMaximized(containerApi, group);
+  const [hasSelection, setHasSelection] = useState(false);
   const terminal = activePanel ? terminals.get(activePanel.id) : undefined;
   if (!terminal) return null;
+  // Looked up on click: the terminal may still be connecting when the header renders.
+  const controls = () => panels.get(terminal.id);
 
   return (
-    <div className="flex h-full items-center gap-1 px-1">
-      <Button
-        size="icon"
-        variant="ghost"
-        className="size-6"
-        onClick={() => void actions.restart(terminal.id)}
-        aria-label="Restart terminal"
+    <div className="flex h-full items-center gap-0.5 px-1">
+      <HeaderButton label="Find in terminal" title="Find" onClick={() => controls()?.openSearch()}>
+        <Search />
+      </HeaderButton>
+      <DropdownMenu
+        onOpenChange={(open) => open && setHasSelection(controls()?.hasSelection() ?? false)}
+      >
+        <DropdownMenuTrigger asChild>
+          <HeaderButton label="More terminal actions" title="Copy, paste, clear">
+            <Ellipsis />
+          </HeaderButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="w-44"
+          // Focus stays in the terminal: Copy and Paste act on whatever has focus.
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <DropdownMenuItem disabled={!hasSelection} onSelect={() => void controls()?.copy()}>
+            <Copy />
+            Copy
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void controls()?.paste()}>
+            <ClipboardPaste />
+            Paste
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => controls()?.selectAll()}>
+            <TextSelect />
+            Select all
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              controls()?.clear();
+              controls()?.focus();
+            }}
+          >
+            <Eraser />
+            Clear
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <HeaderButton
+        label="Restart terminal"
         title="Restart"
+        onClick={() => void actions.restart(terminal.id)}
       >
         <RotateCw />
-      </Button>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="size-6"
+      </HeaderButton>
+      <HeaderButton
+        label="Stop terminal"
+        title="Stop (ends the process and everything it started)"
         disabled={terminal.status !== 'running'}
         onClick={() => void actions.stop(terminal.id)}
-        aria-label="Stop terminal"
-        title="Stop (ends the process and everything it started)"
       >
         <Square />
-      </Button>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="size-6"
-        onClick={() => toggleMaximized(group)}
-        aria-label={maximized ? 'Restore panel' : 'Maximize panel'}
+      </HeaderButton>
+      <HeaderButton
+        label={maximized ? 'Restore panel' : 'Maximize panel'}
         title={maximized ? 'Restore (show all panels)' : 'Maximize'}
+        onClick={() => toggleMaximized(group)}
       >
         {maximized ? <Minimize2 /> : <Maximize2 />}
-      </Button>
+      </HeaderButton>
     </div>
   );
 }

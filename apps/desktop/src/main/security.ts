@@ -25,7 +25,7 @@ export function applySecurityBaseline(): void {
 
   void app.whenReady().then(() => {
     // The UI needs no browser permissions (camera, geolocation, notifications, …).
-    // Clipboard access for terminals is granted explicitly in P5-04.
+    // Terminal copy / paste goes through IPC instead (ipc/clipboard.ts).
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => {
       callback(false);
     });

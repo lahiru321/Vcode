@@ -30,6 +30,8 @@ export const INVOKE_CHANNELS = [
   'settings:get',
   'settings:set',
   'dialog:pickFolder',
+  'clipboard:writeText',
+  'clipboard:paste',
 ] as const;
 
 /** Push channels (main → renderer, `webContents.send`). */

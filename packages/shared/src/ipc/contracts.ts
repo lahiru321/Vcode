@@ -327,6 +327,9 @@ export const SetSettingsRequest = z
   .partial()
   .refine((request) => Object.keys(request).length > 0, { message: 'Nothing to update' });
 
+/** A whole scrollback (5000 lines) of wide lines fits. */
+export const WriteClipboardRequest = z.strictObject({ text: z.string().max(4_000_000) });
+
 /** `path` is null when the user cancels the dialog. */
 export const PickFolderResponse = z.object({ path: z.string().nullable() });
 
@@ -371,6 +374,13 @@ export const invokeContracts = {
   'settings:get': { request: NoPayload, response: Settings },
   'settings:set': { request: SetSettingsRequest, response: Settings },
   'dialog:pickFolder': { request: NoPayload, response: PickFolderResponse },
+  /** Puts text (a terminal's selection) on the clipboard. */
+  'clipboard:writeText': { request: WriteClipboardRequest, response: z.null() },
+  /**
+   * Edit → Paste on the calling window: the focused terminal gets a paste event. The page can't
+   * read the clipboard any other way.
+   */
+  'clipboard:paste': { request: NoPayload, response: z.null() },
 } satisfies Record<InvokeChannel, { request: z.ZodType; response: z.ZodType }>;
 
 export const eventContracts = {
