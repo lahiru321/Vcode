@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppDatabase } from '../db';
 import { createProject, deleteProject } from '../projects/service';
 import { ensureMainWorkspace } from '../workspaces/service';
-import { createAgentSession, setAgentSessionStatus } from './sessions';
+import { createAgentSession, listActiveAgentSessions, setAgentSessionStatus } from './sessions';
 import { tempDir, testDatabase } from '../testing';
 import {
   createAgent,
@@ -386,5 +386,30 @@ describe('detectAgent', () => {
       message: null,
     });
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+describe('listActiveAgentSessions', () => {
+  it('lists runs still going in every project, with their project', async () => {
+    const db = testDatabase();
+    const a = await project(db, 'a');
+    const b = await project(db, 'b');
+    const agent = createAgent(db, { name: 'C', adapter: 'claude' });
+    const first = createAgentSession(db, agent.id, ensureMainWorkspace(db, a).id);
+    setAgentSessionStatus(db, first.id, 'waiting');
+    const ended = createAgentSession(db, agent.id, ensureMainWorkspace(db, a).id);
+    setAgentSessionStatus(db, ended.id, 'stopped');
+    const second = createAgentSession(db, agent.id, ensureMainWorkspace(db, b).id);
+    setAgentSessionStatus(db, second.id, 'working');
+
+    // Sessions started in the same millisecond may come in either order.
+    const active = listActiveAgentSessions(db);
+    expect(active).toHaveLength(2);
+    expect(active).toEqual(
+      expect.arrayContaining([
+        { sessionId: first.id, agentId: agent.id, projectId: a.id, status: 'waiting' },
+        { sessionId: second.id, agentId: agent.id, projectId: b.id, status: 'working' },
+      ]),
+    );
   });
 });

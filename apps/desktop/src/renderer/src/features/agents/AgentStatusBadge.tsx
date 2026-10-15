@@ -38,3 +38,19 @@ export function AgentStatusBadge({
     </span>
   );
 }
+
+/** Just the dot, for tight spots (sidebar rows). */
+export function AgentStatusDot({
+  status,
+  className,
+}: {
+  status: AgentSessionStatus;
+  className?: string;
+}) {
+  return <span className={cn('size-1.5 shrink-0 rounded-full', STATUS[status].dot, className)} />;
+}
+
+/** "Waiting", "Working", … */
+export function agentStatusLabel(status: AgentSessionStatus): string {
+  return STATUS[status].label;
+}

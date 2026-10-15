@@ -19,6 +19,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu';
+import { topStatus, useAgentActivity } from '@renderer/features/agents/AgentActivity';
+import { AgentStatusDot } from '@renderer/features/agents/AgentStatusBadge';
 import { cn } from '@renderer/lib/utils';
 import { useProjects } from './ProjectsProvider';
 
@@ -78,6 +80,26 @@ export function ProjectList() {
   );
 }
 
+/** Agents running in the project (P5-07): the most urgent status, and how many. */
+function ProjectActivity({ projectId }: { projectId: string }) {
+  const runs = useAgentActivity().filter((s) => s.projectId === projectId);
+  const status = topStatus(runs);
+  if (!status) return null;
+  const waiting = runs.filter((s) => s.status === 'waiting').length;
+  const label = `${runs.length} agent${runs.length === 1 ? '' : 's'} running${waiting ? ` · ${waiting} waiting for you` : ''}`;
+  return (
+    <span
+      className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground tabular-nums"
+      title={label}
+      aria-label={label}
+      data-testid="project-activity"
+    >
+      <AgentStatusDot status={status} />
+      {runs.length}
+    </span>
+  );
+}
+
 function ProjectRow({ project }: { project: Project }) {
   const { selected, select, startRename, startRemove, setArchived } = useProjects();
   const isSelected = selected?.id === project.id;
@@ -112,6 +134,7 @@ function ProjectRow({ project }: { project: Project }) {
       >
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         <span className="truncate">{project.name}</span>
+        <ProjectActivity projectId={project.id} />
       </button>
 
       <DropdownMenu>

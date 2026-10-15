@@ -34,8 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P5 — Multi-Terminal Workspace
 
 **Next up:**
-1. `P5-07` Status indicators on each panel and in the sidebar agent list
-2. P5 Done-when check by the owner
+1. P5 Done-when check by the owner: 4+ agents at once in one project, the layout back after an app restart, stopping one leaves the others running
+2. `P6-01` Repository link / detection: remote URL, local path, default branch
+3. `P6-02` Workspace manager UI: list, create, delete
 
 ---
 
@@ -47,7 +48,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | Done |
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
-| P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | In progress |
+| P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | Built; owner check |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | To do |
 | P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | To do |
 | P8 | Distribution | Signed Windows installer with auto-update | M | To do |
@@ -227,7 +228,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-15:* New channels `projects:getLayout` / `projects:saveLayout { id, layout }`: dockview's `toJSON()`, stored as is in `projects.layout_json` (JSON, max 1 MB; main doesn't interpret it). The grid saves 500 ms after each layout change and once more when it goes (switching projects), and restores with `fromJSON` when the project opens (a layout that fails to load gives an empty grid). The grid now stays mounted with the "No terminals open" state as its watermark, so closing the last panel saves `null` too. Terminals don't outlive the app, so on relaunch (owner's choice: nothing starts by itself) the saved panels come back in place as **ended** panels: title, "Stopped", and a **Restart** button that runs the same shell or agent in the same workspace there. A bar above the grid offers **Restart all** / **Close all**. Running terminals missing from the layout get a cell of their own; panels whose terminal is gone are dropped. Find and ⋯ are disabled on ended panels. A stopped terminal's label no longer shows its exit code (it was ended by Vcode, e.g. −1073741510 on Windows). Fixed on the way: dockview's JSON has `undefined` fields, which `z.json()` rejects, so the layout goes through JSON first. Checked in the built app across a real restart: 4 panels (custom split, a renamed tab, an agent) came back in the same places as ended panels; Restart on one, then Restart all, kept the places; switching projects and reloading kept the layout; a closed terminal stayed closed after a reload; closing all then reloading showed the empty state.
 - [x] **P5-06** · Keyboard shortcuts (new terminal, close, maximize, next / previous panel) with `CommandOrControl` · `S`
   - *2026-10-15:* `lib/shortcuts.ts`: one table, one window `keydown` listener in the capture phase (so a shortcut never reaches the shell), taken only while something on screen handles it and never while a dialog or menu is open. Mod = Cmd on macOS, Ctrl elsewhere (`app:getInfo` now returns `platform`). Keys chosen to leave shell keys alone (Ctrl+C / W / T / …), as in Windows Terminal and VS Code: **Mod+Shift+T** new shell, **Mod+Shift+N** New terminal…, **Mod+Shift+W** close, **Mod+Shift+Enter** maximize / restore, **Mod+PageDown / PageUp** next / previous terminal (reading order; leaves a maximized group if needed), **Mod+Shift+F** find, **Mod+Shift+C / V** copy / paste. Shown in the menus and tooltips. Not an Electron menu: xterm takes Ctrl / Ctrl+Shift keys before a menu accelerator would see them; the app menu comes with M-02. Tests: Ctrl vs Cmd, exact modifiers, shell keys untouched, no duplicates, labels. Checked in the built app: every shortcut, Ctrl+C still reaching the shell, and nothing firing while the dialog is open.
-- [ ] **P5-07** · Status indicators on each panel and in the sidebar agent list · `S`
+- [x] **P5-07** · Status indicators on each panel and in the sidebar agent list · `S`
+  - *2026-10-15:* Panels already showed their status on the tab (agent badge or shell dot, P3-07 / P5-01). New channel `agents:sessions`: every agent run still going, in any project, with its project. `AgentActivity.tsx` loads it and keeps it current from `agent:status` (a run it doesn't know yet makes it load the list again, since the event has no project). Sidebar agent rows show the most urgent status of the agent's runs (waiting > working > ready > starting) and ×N for more than one; otherwise the dot is still the last CLI check. Project rows show a dot and how many agents run there (tooltip: "2 agents running · 1 waiting for you"). The status bar's placeholder is now "3 agents running · 1 waiting for you" or "No agents running". Plain shells don't count. Checked in the built app: a shell (not counted), 2 agents in one project and 1 in another (×3, per-project 2 and 1, "3 agents running"), Working while one printed, and the counts dropping on stop and on close.
 
 **Done when:**
 - 4+ agents run at the same time in one project.
@@ -373,3 +375,4 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-15** — P5-03 adds the `terminals:rename` channel here rather than with the toolbar (P5-04), as the P2-07 note planned.
 - **2026-10-15** — P5-04 adds `clipboard:writeText` and `clipboard:paste` rather than allowing clipboard permissions for the page.
 - **2026-10-15** — P5-05: on relaunch the saved layout comes back with ended panels and a Restart button; nothing starts by itself (owner's decision).
+- **2026-10-15** — **P5 Multi-Terminal Workspace built** (P5-01 … P5-07). New channels `workspaces:list`, `terminals:rename`, `clipboard:writeText` / `clipboard:paste`, `projects:getLayout` / `projects:saveLayout`, `agents:sessions`; `app:getInfo` returns the platform. Done-when checks are left for the owner.

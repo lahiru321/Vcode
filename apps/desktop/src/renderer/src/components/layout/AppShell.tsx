@@ -1,5 +1,6 @@
 import { Toaster } from '@renderer/components/ui/sonner';
 import { TooltipProvider } from '@renderer/components/ui/tooltip';
+import { AgentActivityProvider } from '@renderer/features/agents/AgentActivity';
 import { AgentsProvider } from '@renderer/features/agents/AgentsProvider';
 import { ProjectsProvider } from '@renderer/features/projects/ProjectsProvider';
 import { AppNotices } from './AppNotices';
@@ -12,11 +13,13 @@ export function AppShell() {
     <TooltipProvider delayDuration={300}>
       <ProjectsProvider>
         <AgentsProvider>
-          <div className="grid h-full grid-cols-[248px_1fr] grid-rows-[1fr_auto]">
-            <Sidebar />
-            <MainArea />
-            <StatusBar className="col-span-2" />
-          </div>
+          <AgentActivityProvider>
+            <div className="grid h-full grid-cols-[248px_1fr] grid-rows-[1fr_auto]">
+              <Sidebar />
+              <MainArea />
+              <StatusBar className="col-span-2" />
+            </div>
+          </AgentActivityProvider>
         </AgentsProvider>
       </ProjectsProvider>
       <Toaster position="bottom-right" />

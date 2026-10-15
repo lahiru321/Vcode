@@ -18,6 +18,7 @@ export const INVOKE_CHANNELS = [
   'agents:validate',
   'agents:providers',
   'agents:detect',
+  'agents:sessions',
   'credentials:list',
   'credentials:set',
   'credentials:delete',

@@ -11,6 +11,7 @@ import {
   updateAgent,
   validateAgent,
 } from '../agents';
+import { listActiveAgentSessions } from '../agents/sessions';
 import { handle } from './registry';
 
 export function registerAgentHandlers(): void {
@@ -23,4 +24,5 @@ export function registerAgentHandlers(): void {
   );
   handle('agents:providers', () => listProviders());
   handle('agents:detect', (request) => detectAgent(agentDeps(), request));
+  handle('agents:sessions', () => listActiveAgentSessions(getDatabase()));
 }

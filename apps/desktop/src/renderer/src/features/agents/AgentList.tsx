@@ -9,9 +9,13 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu';
 import { cn } from '@renderer/lib/utils';
+import { topStatus, useAgentActivity } from './AgentActivity';
+import { AgentStatusBadge } from './AgentStatusBadge';
 import { useAgents } from './AgentsProvider';
 
-// Agent rows for the sidebar's Agents section: start, edit, check, delete (P4-02).
+// Agent rows for the sidebar's Agents section: start, edit, check, delete (P4-02). While the
+// agent runs, its row shows the most urgent status of its runs and how many there are (P5-07);
+// otherwise the dot is the result of the last CLI check.
 
 const STATUS: Record<AgentStatus, { dot: string; hint: string }> = {
   unvalidated: { dot: 'bg-muted-foreground/50', hint: 'Not checked yet' },
@@ -58,6 +62,8 @@ export function AgentList() {
 function AgentRow({ agent }: { agent: Agent }) {
   const { start, canStart, startEdit, startDelete, validate } = useAgents();
   const status = STATUS[agent.status];
+  const runs = useAgentActivity().filter((s) => s.agentId === agent.id);
+  const running = topStatus(runs);
   const startHint = canStart ? `Start ${agent.name}` : 'Select an active project to start agents';
 
   return (
@@ -79,11 +85,24 @@ function AgentRow({ agent }: { agent: Agent }) {
         {agent.projectId && (
           <span className="shrink-0 text-[11px] text-muted-foreground">project</span>
         )}
-        <span
-          role="img"
-          className={cn('size-1.5 shrink-0 rounded-full', status.dot)}
-          aria-label={status.hint}
-        />
+        {running ? (
+          <span
+            className="flex shrink-0 items-center gap-1"
+            title={`${runs.length} running`}
+            data-testid="agent-activity"
+          >
+            <AgentStatusBadge status={running} />
+            {runs.length > 1 && (
+              <span className="text-[11px] text-muted-foreground tabular-nums">×{runs.length}</span>
+            )}
+          </span>
+        ) : (
+          <span
+            role="img"
+            className={cn('size-1.5 shrink-0 rounded-full', status.dot)}
+            aria-label={status.hint}
+          />
+        )}
       </button>
 
       <div className="absolute right-1 flex items-center">

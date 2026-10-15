@@ -277,6 +277,15 @@ export const TerminalAgent = z.object({
 });
 export type TerminalAgent = z.infer<typeof TerminalAgent>;
 
+/** An agent run that is still going, in any project (P5-07: sidebar and status bar). */
+export const ActiveAgentSession = z.object({
+  sessionId: Id,
+  agentId: Id,
+  projectId: Id,
+  status: z.enum(AGENT_SESSION_STATUSES),
+});
+export type ActiveAgentSession = z.infer<typeof ActiveAgentSession>;
+
 export const AgentStatusEvent = z.object({
   agentSessionId: Id,
   agentId: Id,
@@ -376,6 +385,8 @@ export const invokeContracts = {
   'agents:providers': { request: NoPayload, response: z.array(AgentProvider) },
   /** Runs a provider's version check without saving anything. */
   'agents:detect': { request: DetectAgentRequest, response: AgentDetection },
+  /** Every agent run still going, oldest first; `agent:status` events keep it current. */
+  'agents:sessions': { request: NoPayload, response: z.array(ActiveAgentSession) },
   /** Metadata only: secrets never leave main. */
   'credentials:list': { request: NoPayload, response: z.array(Credential) },
   /** CONFLICT if the name is taken; UNAVAILABLE if this computer can't encrypt. */
