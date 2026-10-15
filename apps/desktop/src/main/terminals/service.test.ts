@@ -15,6 +15,7 @@ import {
   getTerminal,
   listTerminals,
   recordTerminalExit,
+  renameTerminal,
   restartTerminal,
   stopTerminal,
   type TerminalDeps,
@@ -385,6 +386,17 @@ describe('stopTerminal / restartTerminal / closeTerminal', () => {
     await expect(stopTerminal(deps, MISSING_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(restartTerminal(deps, MISSING_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(closeTerminal(deps, MISSING_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(() => renameTerminal(deps.db, MISSING_ID, 'x')).toThrow(
+      expect.objectContaining({ code: 'NOT_FOUND' }),
+    );
+  });
+
+  it('renames a terminal, and a restart keeps the new title', async () => {
+    const { db, deps, t } = await running();
+    expect(renameTerminal(db, t.id, 'API server')).toMatchObject({ id: t.id, title: 'API server' });
+    expect(getTerminal(db, t.id).title).toBe('API server');
+    const restarted = await restartTerminal(deps, t.id);
+    expect(restarted.title).toBe('API server');
   });
 });
 

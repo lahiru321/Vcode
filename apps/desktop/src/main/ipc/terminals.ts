@@ -6,6 +6,7 @@ import {
   closeTerminal,
   createTerminal,
   listTerminals,
+  renameTerminal,
   restartTerminal,
   stopTerminal,
   terminalDeps,
@@ -27,6 +28,9 @@ export function registerTerminalHandlers(): void {
   );
   handle('terminals:restart', async ({ terminalId }) =>
     view(await restartTerminal(terminalDeps(), terminalId)),
+  );
+  handle('terminals:rename', ({ terminalId, title }) =>
+    view(renameTerminal(getDatabase(), terminalId, title)),
   );
   handle('terminals:close', ({ terminalId }) => closeTerminal(terminalDeps(), terminalId));
 

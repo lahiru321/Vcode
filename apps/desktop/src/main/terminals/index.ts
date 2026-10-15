@@ -22,6 +22,7 @@ export {
   closeTerminal,
   createTerminal,
   listTerminals,
+  renameTerminal,
   restartTerminal,
   stopTerminal,
   withAgents,

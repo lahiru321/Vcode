@@ -25,6 +25,8 @@ export interface ProjectTerminals {
   stop: (id: string) => Promise<void>;
   /** Replaces the terminal with a new one at the same place in the list. */
   restart: (id: string) => Promise<void>;
+  /** Changes the title on the terminal's tab; resolves to whether it worked. */
+  rename: (id: string, title: string) => Promise<boolean>;
   /** Stops the terminal if it is running and removes it. */
   close: (id: string) => Promise<void>;
   markExited: (id: string, exitCode: number) => void;
@@ -155,6 +157,19 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     [replace],
   );
 
+  const rename = useCallback(
+    async (id: string, title: string) => {
+      try {
+        replace(id, await invoke('terminals:rename', { terminalId: id, title }));
+        return true;
+      } catch (error) {
+        toast.error('Could not rename the terminal', { description: errorMessage(error) });
+        return false;
+      }
+    },
+    [replace],
+  );
+
   const close = useCallback(async (id: string) => {
     try {
       await invoke('terminals:close', { terminalId: id });
@@ -183,6 +198,7 @@ export function useProjectTerminals(project: Project): ProjectTerminals {
     startAgent,
     stop,
     restart,
+    rename,
     close,
     markExited,
   };

@@ -281,6 +281,8 @@ export type TerminalSession = z.infer<typeof TerminalSession>;
 export const TerminalCols = z.number().int().min(TERMINAL_COLS.min).max(TERMINAL_COLS.max);
 export const TerminalRows = z.number().int().min(TERMINAL_ROWS.min).max(TERMINAL_ROWS.max);
 
+const TerminalTitle = z.string().trim().min(1, 'Enter a title').max(100, 'Title is too long');
+
 export const CreateTerminalRequest = z.strictObject({
   projectId: Id,
   workspaceId: Id.optional(),
@@ -288,7 +290,7 @@ export const CreateTerminalRequest = z.strictObject({
   agentId: Id.optional(),
   cols: TerminalCols,
   rows: TerminalRows,
-  title: z.string().trim().min(1).max(100).optional(),
+  title: TerminalTitle.optional(),
 });
 export type CreateTerminalRequest = z.infer<typeof CreateTerminalRequest>;
 
@@ -301,6 +303,8 @@ export const ListTerminalsRequest = z.strictObject({ projectId: Id });
 export const AttachTerminalRequest = z.strictObject({ terminalId: Id, attachId: Id });
 
 export const TerminalIdRequest = z.strictObject({ terminalId: Id });
+
+export const RenameTerminalRequest = z.strictObject({ terminalId: Id, title: TerminalTitle });
 
 // Settings the renderer may read and change (V1 doc §20). Each key is one `app_settings` row;
 // main falls back to the default when a row is missing or no longer matches its schema.
@@ -362,6 +366,8 @@ export const invokeContracts = {
   'terminals:restart': { request: TerminalIdRequest, response: TerminalSession },
   /** Stops the terminal if it is running; the UI then removes it. */
   'terminals:close': { request: TerminalIdRequest, response: z.object({ terminalId: Id }) },
+  /** The title shown on the terminal's tab; kept when it restarts. */
+  'terminals:rename': { request: RenameTerminalRequest, response: TerminalSession },
   'settings:get': { request: NoPayload, response: Settings },
   'settings:set': { request: SetSettingsRequest, response: Settings },
   'dialog:pickFolder': { request: NoPayload, response: PickFolderResponse },

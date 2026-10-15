@@ -306,6 +306,17 @@ export async function closeTerminal(
   return { terminalId };
 }
 
+/** Changes the title shown on the terminal's tab; a restart keeps it. */
+export function renameTerminal(db: AppDatabase, terminalId: string, title: string): TerminalRow {
+  getTerminal(db, terminalId);
+  return db
+    .update(terminalSessions)
+    .set({ title })
+    .where(eq(terminalSessions.id, terminalId))
+    .returning()
+    .get()!;
+}
+
 function workspaceProjectId(db: AppDatabase, workspaceId: string): string {
   const workspace = db
     .select({ projectId: workspaces.projectId })
