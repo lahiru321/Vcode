@@ -51,15 +51,22 @@ describe('getSettings / updateSettings', () => {
 
   it('stores each setting under its own key', () => {
     const db = testDatabase();
-    expect(updateSettings(db, { selectedProjectId: ID })).toEqual({ selectedProjectId: ID });
+    expect(updateSettings(db, { selectedProjectId: ID })).toEqual({
+      ...SETTING_DEFAULTS,
+      selectedProjectId: ID,
+    });
     expect(rawValue(db, 'selectedProjectId')).toBe(JSON.stringify(ID));
-    expect(updateSettings(db, { selectedProjectId: null })).toEqual({ selectedProjectId: null });
+    expect(updateSettings(db, { selectedProjectId: null, closeToTray: false })).toEqual({
+      selectedProjectId: null,
+      closeToTray: false,
+    });
+    expect(rawValue(db, 'closeToTray')).toBe('false');
   });
 
   it('leaves keys that are not in the patch alone', () => {
     const db = testDatabase();
     updateSettings(db, { selectedProjectId: ID });
-    expect(updateSettings(db, {})).toEqual({ selectedProjectId: ID });
+    expect(updateSettings(db, {})).toEqual({ ...SETTING_DEFAULTS, selectedProjectId: ID });
   });
 
   it('ignores an invalid stored setting', () => {

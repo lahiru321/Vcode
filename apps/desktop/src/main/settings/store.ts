@@ -46,12 +46,13 @@ export function writeSetting(db: Writable, key: string, value: unknown): void {
 
 /** All renderer-visible settings, with defaults filled in. */
 export function getSettings(db: AppDatabase): Settings {
-  const settings = { ...SETTING_DEFAULTS };
+  const settings: Record<string, unknown> = {};
   for (const key of Object.keys(Settings.shape) as SettingKey[]) {
     const schema: z.ZodType<Settings[SettingKey]> = Settings.shape[key];
     settings[key] = readSetting(db, key, schema, SETTING_DEFAULTS[key]);
   }
-  return settings;
+  // Every key was read with its own schema (or given its default).
+  return settings as Settings;
 }
 
 /** Writes the given keys in one transaction and returns the full settings. */

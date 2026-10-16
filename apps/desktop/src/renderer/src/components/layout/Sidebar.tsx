@@ -11,6 +11,7 @@ import { ApiKeysDialog } from '@renderer/features/credentials/ApiKeysDialog';
 import { ProjectList } from '@renderer/features/projects/ProjectList';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 import { WorkspaceList } from '@renderer/features/workspaces/WorkspaceList';
+import { SettingsDialog } from '@renderer/features/settings/SettingsDialog';
 import { useWorkspaces } from '@renderer/features/workspaces/WorkspacesProvider';
 
 export function Sidebar() {
@@ -18,6 +19,7 @@ export function Sidebar() {
   const agents = useAgents();
   const workspaces = useWorkspaces();
   const [keysOpen, setKeysOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <aside className="flex min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -64,7 +66,12 @@ export function Sidebar() {
           <KeyRound />
           API keys
         </Button>
-        <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-muted-foreground"
+          onClick={() => setSettingsOpen(true)}
+        >
           <Settings />
           Settings
         </Button>
@@ -74,6 +81,7 @@ export function Sidebar() {
         onClose={() => setKeysOpen(false)}
         onChanged={() => void agents.reload()}
       />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );
 }

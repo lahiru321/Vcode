@@ -6,6 +6,7 @@ import { closeDatabase, initDatabase } from './db';
 import { broadcastEvent, registerIpcHandlers } from './ipc';
 import { closeLogging, createLogger, initLogging, levelFromEnv } from './logging';
 import { ptyHost } from './pty-host';
+import { allowQuit, handleWindowClose, quitNow } from './quit';
 import { loadRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
 import { trackTerminalSessions } from './terminals';
@@ -80,6 +81,8 @@ function createMainWindow(): BrowserWindow {
     window.show();
   });
   trackWindowState(window);
+  window.on('close', (event) => handleWindowClose(event, window, tray !== null));
+  window.on('session-end', quitNow);
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;
   });
@@ -145,8 +148,13 @@ function startPtyHost(): void {
   ptyHost.start();
 }
 
-// Let the PTY host stop its terminals before the app exits (it gets a few seconds).
+// Quitting with agents running asks first (P7-02). Then the PTY host stops its terminals
+// before the app exits (it gets a few seconds).
 app.on('before-quit', (event) => {
+  if (!allowQuit(mainWindow)) {
+    event.preventDefault();
+    return;
+  }
   if (ptyHost.state === 'idle' || ptyHost.state === 'stopped') {
     return;
   }
@@ -161,7 +169,8 @@ app.on('will-quit', () => {
   closeLogging();
 });
 
-// Close-to-tray (P7-02) and macOS window conventions (M-02) replace this later.
+// Only reached once a quit is under way (the window hides instead of closing otherwise);
+// macOS window conventions (M-02) change this later.
 app.on('window-all-closed', () => {
   app.quit();
 });

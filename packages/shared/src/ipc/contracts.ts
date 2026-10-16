@@ -433,12 +433,15 @@ export const RenameTerminalRequest = z.strictObject({ terminalId: Id, title: Ter
 export const Settings = z.object({
   /** The project shown in the main area; restored on the next launch. */
   selectedProjectId: Id.nullable(),
+  /** Closing the window hides it to the tray; agents keep running (P7-02). */
+  closeToTray: z.boolean(),
 });
 export type Settings = z.infer<typeof Settings>;
 export type SettingKey = keyof Settings;
 
 export const SETTING_DEFAULTS: Settings = {
   selectedProjectId: null,
+  closeToTray: true,
 };
 
 /** Only the given keys are changed. */

@@ -79,6 +79,11 @@ const STATUS_LABEL: Partial<Record<AgentSessionStatus, string>> = {
   waiting: 'waiting for input',
 };
 
+/** How a running agent's status reads in menus and dialogs. */
+export function statusLabel(status: AgentSessionStatus): string {
+  return STATUS_LABEL[status] ?? status;
+}
+
 export function runningSummary(count: number): string {
   if (count === 0) return 'No agents running';
   return count === 1 ? '1 agent running' : `${count} agents running`;
@@ -99,7 +104,7 @@ export function trayMenuTemplate(
   return [
     { label: runningSummary(running.length), enabled: false },
     ...running.map((agent): MenuItemConstructorOptions => ({
-      label: `    ${agent.agentName} · ${agent.projectName} (${STATUS_LABEL[agent.status] ?? agent.status})`,
+      label: `    ${agent.agentName} · ${agent.projectName} (${statusLabel(agent.status)})`,
       enabled: false,
     })),
     { type: 'separator' },

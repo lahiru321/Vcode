@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P7 — Desktop Polish & Hardening
 
 **Next up:**
-1. `P7-02` Close window → hide to tray (setting); quit with running agents → confirmation listing them
-2. `P7-03` Native notifications when an agent finishes or seems to be waiting for input
-3. `P7-04` Single-instance lock
+1. `P7-03` Native notifications when an agent finishes or seems to be waiting for input
+2. `P7-04` Single-instance lock
+3. `P7-07` Setting for the maximum number of concurrent terminals
 
 ---
 
@@ -272,7 +272,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 
 - [x] **P7-01** · System tray with running-agent count (Show / Hide, New Terminal, Quit) · `S`
   - *2026-10-16:* `src/main/tray.ts`. No app icon exists yet (P8-02), so the tray icon is drawn in code: a 16 px blue rounded square with a white ">_" (plus a 2× copy), and a green dot in the corner while any agent runs. Tooltip "Vcode — N agents running". Menu: the count, then one disabled line per running agent ("Claude Code · shop (working)", new `listRunningAgents` query with agent + project names), Show / Hide Vcode (follows the window's show / hide / minimize / restore), New Terminal…, Quit Vcode. It refreshes on every `agent:status` change. Left click toggles the window. New Terminal… shows the window and sends the new event **`app:command { command: 'newTerminal' }`**; the renderer runs the New terminal dialog shortcut's handler (`runShortcut`), or says to select an active project. If the tray can't be created the app carries on (logged). Checked in the built app: no tray errors in the log; `app:command` with no project → the toast, with a project → the New terminal dialog; the icon rendered at 8× matches the design. The tray menu itself is native and can't be driven by Playwright; the owner should click through it.
-- [ ] **P7-02** · Close window → hide to tray (setting); quit with running agents → confirmation listing them · `S`
+- [x] **P7-02** · Close window → hide to tray (setting); quit with running agents → confirmation listing them · `S`
+  - *2026-10-16:* New setting **`closeToTray`** (default on, V1 acceptance #13) and the first real **Settings dialog** (sidebar → Settings; saved on change). `src/main/quit.ts`: the window's `close` hides it instead while the setting is on and a tray exists; the first time, a notification says it's still running in the tray (main-only `trayHintShown`). With the setting off (or no tray), closing quits. Every quit — tray, keyboard, window close — goes through `before-quit`: with agents running it is held and a warning lists them ("2 agents are still running. Quitting stops them." + "• Claude Code in shop (working)" per agent; Quit and stop agents / Cancel, Cancel is the default); agreeing quits for real, then the PTY host stops terminals as before. Windows shutdown / log-off (`session-end`) quits without asking. `getSettings` typed for settings of different types. Checked in the built app (message boxes answered from the test): the setting is on by default; close with nothing running → hidden, app alive; quit with a running agent → asked with the agent listed, Cancel keeps everything; setting off → closing the window asks too; agreeing → the app exits and the agent's process is gone.
 - [ ] **P7-03** · Native notifications when an agent finishes or seems to be waiting for input · `S`
 - [ ] **P7-04** · Single-instance lock (second launch focuses the existing window) · `S`
 - [ ] **P7-05** · Audit log service + simple viewer (terminal start/stop, agent changes, credential changes, workspace operations) · `M`
