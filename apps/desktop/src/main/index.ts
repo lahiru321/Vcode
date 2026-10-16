@@ -13,14 +13,21 @@ import { allowQuit, handleWindowClose, quitNow } from './quit';
 import { loadRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
 import { trackTerminalSessions } from './terminals';
-import { createTray, type AppTray } from './tray';
+import { createTray, showWindow, type AppTray } from './tray';
 import { loadWindowState, trackWindowState } from './window-state';
 
 const log = createLogger('app');
 
-startLogging();
-applySecurityBaseline();
-platform.setAppId(APP_ID);
+// One Vcode per user (P7-04): a second launch exits at once, before it touches the log or the
+// database, and the running one brings its window to the front ('second-instance' below).
+const primary = app.requestSingleInstanceLock();
+if (primary) {
+  startLogging();
+  applySecurityBaseline();
+  platform.setAppId(APP_ID);
+} else {
+  app.exit(0);
+}
 
 function startLogging(): void {
   try {
@@ -109,6 +116,9 @@ function createMainWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
+  if (!primary) {
+    return;
+  }
   try {
     initDatabase(app.getPath('userData'));
   } catch (error) {
@@ -166,6 +176,13 @@ app.on('before-quit', (event) => {
   }
   event.preventDefault();
   void ptyHost.stop().finally(() => app.quit());
+});
+
+app.on('second-instance', () => {
+  log.info('second launch; showing the window');
+  if (mainWindow) {
+    showWindow(mainWindow);
+  }
 });
 
 app.on('will-quit', () => {

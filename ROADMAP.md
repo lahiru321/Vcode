@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P7 — Desktop Polish & Hardening
 
 **Next up:**
-1. `P7-04` Single-instance lock
-2. `P7-07` Setting for the maximum number of concurrent terminals
-3. `P7-05` Audit log service + simple viewer
+1. `P7-07` Setting for the maximum number of concurrent terminals
+2. `P7-05` Audit log service + simple viewer
+3. `P7-06` Security checklist review (V1 doc §21) + Electron fuses
 
 ---
 
@@ -277,7 +277,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-16:* New setting **`closeToTray`** (default on, V1 acceptance #13) and the first real **Settings dialog** (sidebar → Settings; saved on change). `src/main/quit.ts`: the window's `close` hides it instead while the setting is on and a tray exists; the first time, a notification says it's still running in the tray (main-only `trayHintShown`). With the setting off (or no tray), closing quits. Every quit — tray, keyboard, window close — goes through `before-quit`: with agents running it is held and a warning lists them ("2 agents are still running. Quitting stops them." + "• Claude Code in shop (working)" per agent; Quit and stop agents / Cancel, Cancel is the default); agreeing quits for real, then the PTY host stops terminals as before. Windows shutdown / log-off (`session-end`) quits without asking. `getSettings` typed for settings of different types. Checked in the built app (message boxes answered from the test): the setting is on by default; close with nothing running → hidden, app alive; quit with a running agent → asked with the agent listed, Cancel keeps everything; setting off → closing the window asks too; agreeing → the app exits and the agent's process is gone.
 - [x] **P7-03** · Native notifications when an agent finishes or seems to be waiting for input · `S`
   - *2026-10-16:* `src/main/notifications.ts` follows `agent:status`: `completed` → "Claude Code finished", `failed` → "… stopped with an error", `waiting` → "… is waiting for input" (body: the project); `stopped` (the user's own doing) and the routine statuses say nothing. Only while the window isn't visible and focused. WAITING is a guess from terminal activity, so it's announced only once it has lasted 2 s (checked again in the database) and at most once a minute per agent run. New setting **`notifications`** (default on) in the Settings dialog. A click shows the window and sends **`app:command { command: 'showTerminal', projectId, terminalId }`** (`app:command` is now a union); the renderer's new `AppCommands` selects the project and `useTerminalFocus` brings that panel to the front once its grid has it (out of a maximized group too). Windows notifications need an AppUserModelID: new `platform.setAppId`, called with the new `APP_ID` (`com.lahiru321.vcode`, also the installer's appId in P8). The notification icon is the app icon. Checked in the built app (notifications recorded by wrapping `Notification.prototype.show`): window in front → none; hidden → "Quick job finished | shop" and, for an agent that printed then went quiet, "Asker is waiting for input | blog"; clicking the latter with shop selected → window shown, blog selected, the Asker panel in front.
-- [ ] **P7-04** · Single-instance lock (second launch focuses the existing window) · `S`
+- [x] **P7-04** · Single-instance lock (second launch focuses the existing window) · `S`
+  - *2026-10-16:* `app.requestSingleInstanceLock()` first thing in `src/main/index.ts`: a second launch calls `app.exit(0)` before it starts logging, the database or a window; the running one gets `second-instance` and shows / restores / focuses its window (also when hidden to the tray). The lock is per user-data folder, so tests and a dev build with their own `--user-data-dir` still run alongside. Checked in the built app: window hidden to the tray, same app launched again → the second process exited (code 0) in ~0.3 s, the first window was shown again, still one window, one "Vcode starting" line in the log; a launch with another user-data folder kept running.
 - [ ] **P7-05** · Audit log service + simple viewer (terminal start/stop, agent changes, credential changes, workspace operations) · `M`
 - [ ] **P7-06** · Security checklist review (V1 doc §21) + Electron fuses · `S`
 - [ ] **P7-07** · Setting for the maximum number of concurrent terminals · `S`
