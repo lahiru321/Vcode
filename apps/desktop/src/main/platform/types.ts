@@ -75,4 +75,10 @@ export interface Platform {
    * (absolute paths; they may not exist).
    */
   vsCodeLocations(env: Environment): string[];
+
+  /**
+   * Gives the app its identity with the OS before any window or notification: on Windows the
+   * AppUserModelID, without which notifications from a development build may not show.
+   */
+  setAppId(id: string): void;
 }

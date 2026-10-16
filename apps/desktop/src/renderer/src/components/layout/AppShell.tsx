@@ -4,6 +4,7 @@ import { AgentActivityProvider } from '@renderer/features/agents/AgentActivity';
 import { AgentsProvider } from '@renderer/features/agents/AgentsProvider';
 import { ProjectsProvider } from '@renderer/features/projects/ProjectsProvider';
 import { WorkspacesProvider } from '@renderer/features/workspaces/WorkspacesProvider';
+import { AppCommands } from './AppCommands';
 import { AppNotices } from './AppNotices';
 import { MainArea } from './MainArea';
 import { Sidebar } from './Sidebar';
@@ -21,6 +22,7 @@ export function AppShell() {
                 <MainArea />
                 <StatusBar className="col-span-2" />
               </div>
+              <AppCommands />
             </AgentActivityProvider>
           </WorkspacesProvider>
         </AgentsProvider>

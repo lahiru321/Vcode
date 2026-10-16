@@ -16,6 +16,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu';
 import { AgentStatusBadge } from '@renderer/features/agents/AgentStatusBadge';
 import { shortcutLabel, useShortcut, type ShortcutId } from '@renderer/lib/shortcuts';
+import { useTerminalFocus } from '@renderer/lib/terminal-focus';
 import { cn } from '@renderer/lib/utils';
 import {
   DockviewReact,
@@ -376,6 +377,7 @@ export function TerminalGrid({
 
   useLayoutSaving(api, terminals.saveLayout);
   useGridShortcuts(api, terminals, panels);
+  useTerminalFocus(api, list);
 
   const context: GridContext = {
     terminals: new Map(list.map((t) => [t.id, t])),

@@ -57,6 +57,7 @@ describe('getSettings / updateSettings', () => {
     });
     expect(rawValue(db, 'selectedProjectId')).toBe(JSON.stringify(ID));
     expect(updateSettings(db, { selectedProjectId: null, closeToTray: false })).toEqual({
+      ...SETTING_DEFAULTS,
       selectedProjectId: null,
       closeToTray: false,
     });

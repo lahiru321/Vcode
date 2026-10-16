@@ -43,11 +43,13 @@ export const AppNotice = z.object({
 });
 export type AppNotice = z.infer<typeof AppNotice>;
 
-/** Something chosen outside the page (e.g. the tray menu) for the renderer to do. */
-export const AppCommand = z.object({
-  /** `newTerminal`: the New terminal dialog for the project on screen. */
-  command: z.enum(['newTerminal']),
-});
+/** Something chosen outside the page (the tray menu, a notification) for the renderer to do. */
+export const AppCommand = z.discriminatedUnion('command', [
+  /** The New terminal dialog for the project on screen. */
+  z.object({ command: z.literal('newTerminal') }),
+  /** Select the project and bring the terminal's panel to the front. */
+  z.object({ command: z.literal('showTerminal'), projectId: Id, terminalId: Id }),
+]);
 export type AppCommand = z.infer<typeof AppCommand>;
 
 // Projects (V1 doc §20). Deleting a project removes its records, never files on disk.
@@ -435,6 +437,8 @@ export const Settings = z.object({
   selectedProjectId: Id.nullable(),
   /** Closing the window hides it to the tray; agents keep running (P7-02). */
   closeToTray: z.boolean(),
+  /** Notify when an agent finishes, fails, or waits for input while the app is in the background (P7-03). */
+  notifications: z.boolean(),
 });
 export type Settings = z.infer<typeof Settings>;
 export type SettingKey = keyof Settings;
@@ -442,6 +446,7 @@ export type SettingKey = keyof Settings;
 export const SETTING_DEFAULTS: Settings = {
   selectedProjectId: null,
   closeToTray: true,
+  notifications: true,
 };
 
 /** Only the given keys are changed. */

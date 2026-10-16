@@ -1,11 +1,13 @@
 import { arch, release, type } from 'node:os';
 import { join } from 'node:path';
-import { APP_NAME } from '@vcode/shared';
+import { APP_ID, APP_NAME } from '@vcode/shared';
 import { app, BrowserWindow, dialog } from 'electron';
 import { closeDatabase, initDatabase } from './db';
 import { broadcastEvent, registerIpcHandlers } from './ipc';
 import { APP_ICON_PATH } from './icon';
 import { closeLogging, createLogger, initLogging, levelFromEnv } from './logging';
+import { startNotifications } from './notifications';
+import { platform } from './platform';
 import { ptyHost } from './pty-host';
 import { allowQuit, handleWindowClose, quitNow } from './quit';
 import { loadRenderer } from './renderer';
@@ -18,6 +20,7 @@ const log = createLogger('app');
 
 startLogging();
 applySecurityBaseline();
+platform.setAppId(APP_ID);
 
 function startLogging(): void {
   try {
@@ -124,6 +127,7 @@ ${error instanceof Error ? error.message : String(error)}`,
   startPtyHost();
   mainWindow = createMainWindow();
   startTray(mainWindow);
+  startNotifications(() => mainWindow);
 });
 
 function startTray(window: BrowserWindow): void {

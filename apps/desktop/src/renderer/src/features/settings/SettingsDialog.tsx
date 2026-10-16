@@ -1,4 +1,4 @@
-import type { Settings } from '@vcode/shared';
+import { APP_NAME, type Settings } from '@vcode/shared';
 import { useEffect, useId, useState } from 'react';
 import {
   Dialog,
@@ -72,6 +72,22 @@ function SettingsForm() {
           <span className="text-xs text-muted-foreground">
             Agents keep working; open the window again from the tray icon. Off: closing the window
             quits, asking first if agents are running.
+          </span>
+        </span>
+      </label>
+      <label htmlFor={`${ids}-notify`} className="flex cursor-pointer items-start gap-3">
+        <input
+          id={`${ids}-notify`}
+          type="checkbox"
+          className="mt-0.5 size-4 shrink-0 accent-primary"
+          checked={settings.notifications}
+          onChange={(event) => change({ notifications: event.target.checked })}
+        />
+        <span className="grid gap-1">
+          <span className="text-sm font-medium">Notify me about agents</span>
+          <span className="text-xs text-muted-foreground">
+            When an agent finishes, fails, or seems to be waiting for input while {APP_NAME} isn’t
+            in front. Click a notification to go to its terminal.
           </span>
         </span>
       </label>

@@ -1,6 +1,6 @@
 import { lstat, stat } from 'node:fs/promises';
 import { extname, isAbsolute, join, normalize } from 'node:path';
-import { shell } from 'electron';
+import { app, shell } from 'electron';
 import { assertPid, run, toEnvironment } from './common';
 import type {
   Command,
@@ -278,6 +278,7 @@ export const win32: Platform = {
   processInfo,
   loadUserEnvironment,
   revealInFileManager: (path) => shell.showItemInFolder(path),
+  setAppId: (id) => app.setAppUserModelId(id),
   vsCodeLocations: (env) =>
     [
       // User install (the default), then system install.

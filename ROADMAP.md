@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P7 — Desktop Polish & Hardening
 
 **Next up:**
-1. `P7-03` Native notifications when an agent finishes or seems to be waiting for input
-2. `P7-04` Single-instance lock
-3. `P7-07` Setting for the maximum number of concurrent terminals
+1. `P7-04` Single-instance lock
+2. `P7-07` Setting for the maximum number of concurrent terminals
+3. `P7-05` Audit log service + simple viewer
 
 ---
 
@@ -275,7 +275,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-16:* The owner added the logo (`docs/brand/vcode-logo.png`); its purple V is now the app icon: `apps/desktop/resources/icon.png` (512 px, cropped from the logo onto its own dark background, rounded corners), copied next to the main bundle by `build/copy-resources.ts` (like the migrations) and read via `src/main/icon.ts`. It is the window / taskbar icon and the tray icon (resized to 16 px + 2×, the green running dot drawn on top); the drawn ">_" is gone. The sidebar mark uses a 64 px copy (`renderer/src/assets/logo.png`).
 - [x] **P7-02** · Close window → hide to tray (setting); quit with running agents → confirmation listing them · `S`
   - *2026-10-16:* New setting **`closeToTray`** (default on, V1 acceptance #13) and the first real **Settings dialog** (sidebar → Settings; saved on change). `src/main/quit.ts`: the window's `close` hides it instead while the setting is on and a tray exists; the first time, a notification says it's still running in the tray (main-only `trayHintShown`). With the setting off (or no tray), closing quits. Every quit — tray, keyboard, window close — goes through `before-quit`: with agents running it is held and a warning lists them ("2 agents are still running. Quitting stops them." + "• Claude Code in shop (working)" per agent; Quit and stop agents / Cancel, Cancel is the default); agreeing quits for real, then the PTY host stops terminals as before. Windows shutdown / log-off (`session-end`) quits without asking. `getSettings` typed for settings of different types. Checked in the built app (message boxes answered from the test): the setting is on by default; close with nothing running → hidden, app alive; quit with a running agent → asked with the agent listed, Cancel keeps everything; setting off → closing the window asks too; agreeing → the app exits and the agent's process is gone.
-- [ ] **P7-03** · Native notifications when an agent finishes or seems to be waiting for input · `S`
+- [x] **P7-03** · Native notifications when an agent finishes or seems to be waiting for input · `S`
+  - *2026-10-16:* `src/main/notifications.ts` follows `agent:status`: `completed` → "Claude Code finished", `failed` → "… stopped with an error", `waiting` → "… is waiting for input" (body: the project); `stopped` (the user's own doing) and the routine statuses say nothing. Only while the window isn't visible and focused. WAITING is a guess from terminal activity, so it's announced only once it has lasted 2 s (checked again in the database) and at most once a minute per agent run. New setting **`notifications`** (default on) in the Settings dialog. A click shows the window and sends **`app:command { command: 'showTerminal', projectId, terminalId }`** (`app:command` is now a union); the renderer's new `AppCommands` selects the project and `useTerminalFocus` brings that panel to the front once its grid has it (out of a maximized group too). Windows notifications need an AppUserModelID: new `platform.setAppId`, called with the new `APP_ID` (`com.lahiru321.vcode`, also the installer's appId in P8). The notification icon is the app icon. Checked in the built app (notifications recorded by wrapping `Notification.prototype.show`): window in front → none; hidden → "Quick job finished | shop" and, for an agent that printed then went quiet, "Asker is waiting for input | blog"; clicking the latter with shop selected → window shown, blog selected, the Asker panel in front.
 - [ ] **P7-04** · Single-instance lock (second launch focuses the existing window) · `S`
 - [ ] **P7-05** · Audit log service + simple viewer (terminal start/stop, agent changes, credential changes, workspace operations) · `M`
 - [ ] **P7-06** · Security checklist review (V1 doc §21) + Electron fuses · `S`
@@ -342,6 +343,7 @@ From the Vibe Coding Plan (§20 roadmap):
 | Code-signing certificate (Authenticode; Apple Developer ID later) | P8-03 | Open |
 | GitHub repo location + public / private | P1-16 | Decided 2026-10-03: **github.com/lahiru321/Vcode**, public |
 | License | P8 | Open |
+| App ID (Windows AppUserModelID, installer appId) | P7-03 | Set 2026-10-16: `com.lahiru321.vcode`; change before the first release if wanted |
 | Git hooks for git commands Vcode runs | P6-04 | Decided 2026-10-16: **off** (`core.hooksPath` to a path that can't exist) |
 
 ---
