@@ -1,8 +1,9 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { isRendererUrl, RENDERER_URL, rendererFile } from './renderer';
 
-const root = join('C:', 'app', 'out', 'renderer');
+// Absolute on every OS (C:pp\… or D:pp\… on Windows, /app/… elsewhere).
+const root = resolve('/app/out/renderer');
 
 describe('rendererFile', () => {
   it('maps app://vcode/ URLs to files under the renderer folder', () => {
