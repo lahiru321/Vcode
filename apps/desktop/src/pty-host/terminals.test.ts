@@ -376,7 +376,8 @@ describe('TerminalManager (real node-pty)', () => {
   const shellArgs = isWindows ? ['-NoLogo', '-NoProfile'] : [];
   const enter = isWindows ? '\r' : '\n';
 
-  it('runs a real shell: input in, output out, exit reported', async () => {
+  // Windows PowerShell can take well over 15 s to draw its first prompt on a cold CI runner.
+  it('runs a real shell: input in, output out, exit reported', { timeout: 120_000 }, async () => {
     const exits: TerminalExit[] = [];
     manager = new TerminalManager(spawnPty, (exit) => exits.push(exit));
     const { pid } = manager.spawn({
@@ -393,7 +394,7 @@ describe('TerminalManager (real node-pty)', () => {
     // PowerShell reads it (seen on slow CI runners).
     await vi.waitFor(
       () => expect(manager!.output('real')).toMatch(isWindows ? /PS .*>/ : /[$#]\s*$/),
-      { timeout: 15_000, interval: 100 },
+      { timeout: 60_000, interval: 100 },
     );
 
     // Arithmetic, so the match is the shell's output rather than the echoed input.
