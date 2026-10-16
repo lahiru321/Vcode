@@ -4,7 +4,12 @@ import { dotPixel, runningSummary, trayMenuTemplate, type TrayActions } from './
 vi.mock('electron', () => ({ Menu: {}, nativeImage: {}, Tray: class {}, shell: {} }));
 vi.mock('./ipc', () => ({ broadcastEvent: vi.fn() }));
 
-const actions: TrayActions = { toggleWindow: vi.fn(), newTerminal: vi.fn(), quit: vi.fn() };
+const actions: TrayActions = {
+  toggleWindow: vi.fn(),
+  newTerminal: vi.fn(),
+  about: vi.fn(),
+  quit: vi.fn(),
+};
 
 describe('runningSummary', () => {
   it('counts agents', () => {
@@ -34,6 +39,7 @@ describe('trayMenuTemplate', () => {
       'Hide Vcode',
       'New Terminal…',
       'separator',
+      'About Vcode',
       'Quit Vcode',
     ]);
     expect(menu.slice(0, 3).every((item) => item.enabled === false)).toBe(true);
@@ -48,6 +54,7 @@ describe('trayMenuTemplate', () => {
       'Show Vcode',
       'New Terminal…',
       'separator',
+      'About Vcode',
       'Quit Vcode',
     ]);
   });

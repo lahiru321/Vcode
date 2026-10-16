@@ -4,6 +4,7 @@
 /** Request/response channels (renderer → main, `ipcRenderer.invoke`). */
 export const INVOKE_CHANNELS = [
   'app:getInfo',
+  'app:showAbout',
   'projects:list',
   'projects:get',
   'projects:create',

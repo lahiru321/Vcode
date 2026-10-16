@@ -495,6 +495,8 @@ export const PickFolderResponse = z.object({ path: z.string().nullable() });
 
 export const invokeContracts = {
   'app:getInfo': { request: NoPayload, response: AppInfo },
+  /** The native About window (P8-02). */
+  'app:showAbout': { request: NoPayload, response: z.null() },
   'projects:list': { request: NoPayload, response: z.array(Project) },
   'projects:get': { request: ProjectIdRequest, response: Project },
   'projects:create': { request: CreateProjectRequest, response: Project },

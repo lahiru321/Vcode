@@ -2,6 +2,7 @@ import { arch, release, type } from 'node:os';
 import { join } from 'node:path';
 import { APP_ID, APP_NAME } from '@vcode/shared';
 import { app, BrowserWindow, dialog } from 'electron';
+import { configureAbout } from './about';
 import { pruneAudit, trackAgentRunEnds } from './audit/service';
 import { closeDatabase, getDatabase, initDatabase } from './db';
 import { broadcastEvent, registerIpcHandlers } from './ipc';
@@ -145,6 +146,7 @@ ${error instanceof Error ? error.message : String(error)}`,
 
   registerIpcHandlers();
   serveRenderer();
+  configureAbout();
   startAuditTrail();
   startPtyHost();
   mainWindow = createMainWindow();

@@ -4,6 +4,8 @@
   "productName": "Vcode",
   "private": true,
   "description": "Vcode desktop app",
+  "author": "lahiru321",
+  "homepage": "https://github.com/lahiru321/Vcode",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

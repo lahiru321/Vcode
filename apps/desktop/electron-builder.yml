@@ -2,7 +2,7 @@
 # apps/desktop/release/. macOS (DMG, signing, notarization) comes after V1.
 appId: com.lahiru321.vcode # APP_ID in packages/shared; also the Windows AppUserModelID
 productName: Vcode
-copyright: Copyright © 2026 Lahiru Jeewantha
+copyright: Copyright © 2026 lahiru321
 
 directories:
   output: release

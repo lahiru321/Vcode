@@ -1,5 +1,6 @@
 import { APP_NAME } from '@vcode/shared';
 import { app } from 'electron';
+import { showAbout } from '../about';
 import { platform } from '../platform';
 import { handle } from './registry';
 
@@ -15,4 +16,8 @@ export function registerAppHandlers(): void {
       node: process.versions.node,
     },
   }));
+  handle('app:showAbout', () => {
+    showAbout();
+    return null;
+  });
 }

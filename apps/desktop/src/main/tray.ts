@@ -8,6 +8,7 @@ import {
   type NativeImage,
 } from 'electron';
 import { agentSessionEvents, listRunningAgents, type RunningAgent } from './agents/sessions';
+import { showAbout } from './about';
 import { getDatabase } from './db';
 import { APP_ICON_PATH } from './icon';
 import { broadcastEvent } from './ipc';
@@ -76,6 +77,7 @@ export function runningSummary(count: number): string {
 export interface TrayActions {
   toggleWindow: () => void;
   newTerminal: () => void;
+  about: () => void;
   quit: () => void;
 }
 
@@ -95,6 +97,7 @@ export function trayMenuTemplate(
     { label: windowVisible ? `Hide ${APP_NAME}` : `Show ${APP_NAME}`, click: actions.toggleWindow },
     { label: 'New Terminal…', click: actions.newTerminal },
     { type: 'separator' },
+    { label: `About ${APP_NAME}`, click: actions.about },
     { label: `Quit ${APP_NAME}`, click: actions.quit },
   ];
 }
@@ -142,6 +145,7 @@ export function createTray(getWindow: () => BrowserWindow | null, quit: () => vo
       showWindow(window);
       broadcastEvent('app:command', { command: 'newTerminal' });
     },
+    about: showAbout,
     quit,
   };
 

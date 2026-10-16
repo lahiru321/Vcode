@@ -1,12 +1,15 @@
 import { APP_NAME, MAX_TERMINALS, type Settings } from '@vcode/shared';
 import { useEffect, useId, useState } from 'react';
+import { Button } from '@renderer/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@renderer/components/ui/dialog';
+import { useAppInfo } from '@renderer/lib/app-info';
 import { Input } from '@renderer/components/ui/input';
 import { Label } from '@renderer/components/ui/label';
 import { errorMessage, FormError } from '@renderer/lib/form';
@@ -28,8 +31,24 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           <DialogDescription>Changes are saved right away.</DialogDescription>
         </DialogHeader>
         {open && <SettingsForm />}
+        <AboutLine />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The version, and the native About window. */
+function AboutLine() {
+  const info = useAppInfo();
+  return (
+    <DialogFooter className="items-center border-t pt-3 sm:justify-between">
+      <span className="font-mono text-xs text-muted-foreground">
+        {info ? `${info.name} ${info.version}` : APP_NAME}
+      </span>
+      <Button variant="ghost" size="sm" onClick={() => void invoke('app:showAbout')}>
+        About {APP_NAME}
+      </Button>
+    </DialogFooter>
   );
 }
 

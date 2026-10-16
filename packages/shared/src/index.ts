@@ -5,6 +5,8 @@
 export const APP_NAME = 'Vcode';
 /** Windows AppUserModelID and, later, the installer's appId (P8). */
 export const APP_ID = 'com.lahiru321.vcode';
+/** Source and releases (About, update notes). */
+export const APP_REPO_URL = 'https://github.com/lahiru321/Vcode';
 
 export * from './domain';
 export * from './slug';
