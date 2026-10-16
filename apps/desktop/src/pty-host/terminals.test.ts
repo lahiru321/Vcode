@@ -389,6 +389,12 @@ describe('TerminalManager (real node-pty)', () => {
       rows: 30,
     });
     expect(pid).toBeGreaterThan(0);
+    // Typed only once the shell shows its prompt: ConPTY can drop input that arrives before
+    // PowerShell reads it (seen on slow CI runners).
+    await vi.waitFor(
+      () => expect(manager!.output('real')).toMatch(isWindows ? /PS .*>/ : /[$#]\s*$/),
+      { timeout: 15_000, interval: 100 },
+    );
 
     // Arithmetic, so the match is the shell's output rather than the echoed input.
     const command = isWindows

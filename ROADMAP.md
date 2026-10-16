@@ -31,12 +31,12 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P7 — Desktop Polish & Hardening (built; waiting for the first CI run of the e2e job and the owner's Done-when check)
+**Current phase:** P8 — Distribution (P7 built; waiting for the owner's Done-when check)
 
 **Next up:**
-1. Push, and check the new `e2e` CI job passes on Windows and macOS
-2. P7 Done-when check by the owner: tray menu items, close to tray, the quit confirmation and a real notification click
-3. `P8-01` electron-builder config: NSIS installer, Windows x64
+1. P7 Done-when check by the owner: tray menu items, close to tray, the quit confirmation and a real notification click
+2. `P8-02` App icon (.ico), product name, version, About dialog
+3. `P8-04` Auto-update with electron-updater + GitHub Releases (P8-03 signing waits for the certificate decision)
 
 ---
 
@@ -50,8 +50,8 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | Done |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | Done |
-| P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | Built; CI + owner check |
-| P8 | Distribution | Signed Windows installer with auto-update | M | To do |
+| P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | Built; owner check |
+| P8 | Distribution | Signed Windows installer with auto-update | M | In progress |
 | — | macOS Release | Same app on macOS | M | After V1 |
 | — | V2+ | Orchestration, verification, project memory | — | Later |
 
@@ -300,8 +300,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 **Goal:** a signed Windows installer that updates itself.
 **Depends on:** P7.
 
-- [ ] **P8-01** · electron-builder config: NSIS installer, Windows x64 · `M`
-  - *Note (P7-06):* call `applyFuses` (`apps/desktop/build/fuses.ts`) on the packaged executable in `afterPack`, before signing; ship `app.asar` (OnlyLoadAppFromAsar is on) with its integrity hash; use `APP_ID` as the appId.
+- [x] **P8-01** · electron-builder config: NSIS installer, Windows x64 · `M`
+  - *2026-10-16:* `apps/desktop/electron-builder.yml` (electron-builder 26): `pnpm dist` → `apps/desktop/release/Vcode-Setup-<version>.exe` (~121 MB; `pnpm dist:dir` for the unpacked app only). appId `com.lahiru321.vcode` (= `APP_ID`), per-user NSIS installer (no admin), install folder can be changed, desktop + Start menu shortcuts, app data kept on uninstall; icon from `resources/icon.png`. Only `out/**` is packed; the runtime packages come from `dependencies`, now only what main and the PTY host load (`zod`, `pino`, `node-pty`, `drizzle-orm`, `better-sqlite3`, `@xterm/headless`, `@xterm/addon-serialize`) — React, Radix, xterm UI etc. moved to devDependencies (bundled by Vite), so `app.asar` is 15 MB with nothing else in it. `npmRebuild: false` (Node-API prebuilds, P1-09); `asarUnpack` node-pty (worker, conpty.dll), `*.node` and the icon (Windows notifications need a real file; `APP_ICON_PATH` points at `app.asar.unpacked`). `afterPack` (`build/after-pack.mjs`) applies the fuses after electron-builder embeds the ASAR integrity hash. **Found on the way:** with the GrantFileProtocolExtraPrivileges fuse off, a `file://` page can't load its ES-module scripts — the packaged window stayed black. The built UI is now served on **`app://vcode/`** (`protocol.handle`, only files under `out/renderer`; IPC accepts exactly `app://vcode/index.html`), as Electron recommends; the e2e tests run through it too. The packaged app also refuses `--remote-debugging-port` / `--remote-debugging-pipe` (exit 1), which fuses don't cover. Checked on the packaged app (driven over DevTools before that refusal existed): UI from `app://vcode/index.html`, a PowerShell terminal and a custom agent ran (the agent wrote its file), database and log created, `ELECTRON_RUN_AS_NODE` ignored; then: refused with the debugging switch, normal launch fine. Not signed yet (P8-03). Also fixed for CI: a flaky real-PTY test now types only after the shell's prompt.
 - [ ] **P8-02** · App icon, product name, version, About dialog · `S`
   - *2026-10-16:* App icon PNG done early (see P7-01); the installer still needs an `.ico` / `.icns` made from `apps/desktop/resources/icon.png`.
 - [ ] **P8-03** · Authenticode code signing (needs the certificate decision below) · `S`

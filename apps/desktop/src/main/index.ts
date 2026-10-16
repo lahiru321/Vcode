@@ -11,7 +11,7 @@ import { startNotifications } from './notifications';
 import { platform } from './platform';
 import { ptyHost } from './pty-host';
 import { allowQuit, handleWindowClose, quitNow } from './quit';
-import { loadRenderer } from './renderer';
+import { loadRenderer, registerRendererScheme, serveRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
 import { trackTerminalSessions } from './terminals';
 import { createTray, showWindow, type AppTray } from './tray';
@@ -19,15 +19,24 @@ import { loadWindowState, trackWindowState } from './window-state';
 
 const log = createLogger('app');
 
+// The packaged app won't run with Chromium's remote debugging on: another program could start it
+// that way and drive it. The fuses (build/fuses.ts) cover Node's --inspect, not these.
+const debuggingRequested =
+  app.isPackaged &&
+  ['remote-debugging-port', 'remote-debugging-pipe'].some((name) =>
+    app.commandLine.hasSwitch(name),
+  );
+
 // One Vcode per user (P7-04): a second launch exits at once, before it touches the log or the
 // database, and the running one brings its window to the front ('second-instance' below).
-const primary = app.requestSingleInstanceLock();
+const primary = !debuggingRequested && app.requestSingleInstanceLock();
 if (primary) {
   startLogging();
   applySecurityBaseline();
+  registerRendererScheme();
   platform.setAppId(APP_ID);
 } else {
-  app.exit(0);
+  app.exit(debuggingRequested ? 1 : 0);
 }
 
 function startLogging(): void {
@@ -135,6 +144,7 @@ ${error instanceof Error ? error.message : String(error)}`,
   }
 
   registerIpcHandlers();
+  serveRenderer();
   startAuditTrail();
   startPtyHost();
   mainWindow = createMainWindow();

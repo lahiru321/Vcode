@@ -1,0 +1,54 @@
+# Packaging (P8-01, V1 doc §22): an NSIS installer for Windows x64. `pnpm dist` builds it into
+# apps/desktop/release/. macOS (DMG, signing, notarization) comes after V1.
+appId: com.lahiru321.vcode # APP_ID in packages/shared; also the Windows AppUserModelID
+productName: Vcode
+copyright: Copyright © 2026 Lahiru Jeewantha
+
+directories:
+  output: release
+  buildResources: resources
+
+# Only the electron-vite output: main, preload, PTY host and renderer bundles, migrations and the
+# icon. Runtime npm packages (dependencies in package.json) are added by electron-builder.
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+
+asar: true
+asarUnpack:
+  # node-pty loads its worker script, conpty.dll and (macOS) spawn-helper from its own folder.
+  - '**/node_modules/node-pty/**'
+  # Native modules (better-sqlite3's prebuilt Node-API binary).
+  - '**/*.node'
+  # The icon, for Windows notifications, which need a real file (src/main/icon.ts).
+  - out/main/resources/**
+
+# better-sqlite3 and node-pty ship prebuilt Node-API binaries that load in Electron as they are
+# (P1-09); rebuilding would only compile code that is never loaded.
+npmRebuild: false
+buildDependenciesFromSource: false
+
+# Electron fuses (build/fuses.ts) on the packaged executable, before it is signed.
+afterPack: build/after-pack.mjs
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false # per-user install: no admin rights needed
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Vcode
+  uninstallDisplayName: Vcode
+  artifactName: Vcode-Setup-${version}.${ext}
+  # Projects, agents and API keys stay unless the user deletes %APPDATA%\Vcode.
+  deleteAppDataOnUninstall: false
+
+# Publishing (GitHub Releases) comes with auto-update (P8-04).
+publish: null

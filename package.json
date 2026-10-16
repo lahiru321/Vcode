@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @vcode/desktop dev",
     "build": "pnpm --filter @vcode/desktop build",
+    "dist": "pnpm --filter @vcode/desktop dist",
     "db:generate": "pnpm --filter @vcode/desktop db:generate",
     "postinstall": "node scripts/fix-node-pty.mjs",
     "lint": "eslint .",
