@@ -8,6 +8,7 @@ export {
   createAgent,
   deleteAgent,
   detectAgent,
+  getAgent,
   listAgents,
   listProviders,
   toAgent,

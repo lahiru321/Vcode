@@ -21,6 +21,7 @@ export {
   attachTerminal,
   closeTerminal,
   createTerminal,
+  getTerminal,
   listTerminals,
   renameTerminal,
   restartTerminal,

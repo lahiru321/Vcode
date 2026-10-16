@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { APP_NAME } from '@vcode/shared';
-import { FolderPlus, KeyRound, Plus, Settings } from 'lucide-react';
+import { FolderPlus, KeyRound, Plus, ScrollText, Settings } from 'lucide-react';
 import logo from '@renderer/assets/logo.png';
 import { Button } from '@renderer/components/ui/button';
 import { ScrollArea } from '@renderer/components/ui/scroll-area';
@@ -8,6 +8,7 @@ import { Separator } from '@renderer/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip';
 import { AgentList } from '@renderer/features/agents/AgentList';
 import { useAgents } from '@renderer/features/agents/AgentsProvider';
+import { AuditLogDialog } from '@renderer/features/audit/AuditLogDialog';
 import { ApiKeysDialog } from '@renderer/features/credentials/ApiKeysDialog';
 import { ProjectList } from '@renderer/features/projects/ProjectList';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
@@ -21,6 +22,7 @@ export function Sidebar() {
   const workspaces = useWorkspaces();
   const [keysOpen, setKeysOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   return (
     <aside className="flex min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -69,6 +71,15 @@ export function Sidebar() {
           variant="ghost"
           size="sm"
           className="w-full justify-start text-muted-foreground"
+          onClick={() => setAuditOpen(true)}
+        >
+          <ScrollText />
+          Audit log
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-muted-foreground"
           onClick={() => setSettingsOpen(true)}
         >
           <Settings />
@@ -81,6 +92,7 @@ export function Sidebar() {
         onChanged={() => void agents.reload()}
       />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <AuditLogDialog open={auditOpen} onClose={() => setAuditOpen(false)} />
     </aside>
   );
 }

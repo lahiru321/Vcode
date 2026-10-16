@@ -2,7 +2,8 @@ import { arch, release, type } from 'node:os';
 import { join } from 'node:path';
 import { APP_ID, APP_NAME } from '@vcode/shared';
 import { app, BrowserWindow, dialog } from 'electron';
-import { closeDatabase, initDatabase } from './db';
+import { pruneAudit, trackAgentRunEnds } from './audit/service';
+import { closeDatabase, getDatabase, initDatabase } from './db';
 import { broadcastEvent, registerIpcHandlers } from './ipc';
 import { APP_ICON_PATH } from './icon';
 import { closeLogging, createLogger, initLogging, levelFromEnv } from './logging';
@@ -134,6 +135,7 @@ ${error instanceof Error ? error.message : String(error)}`,
   }
 
   registerIpcHandlers();
+  startAuditTrail();
   startPtyHost();
   mainWindow = createMainWindow();
   startTray(mainWindow);
@@ -151,6 +153,13 @@ function startTray(window: BrowserWindow): void {
     // The app works without a tray icon (e.g. a Linux desktop without a status area).
     log.error({ err }, 'could not create the tray icon');
   }
+}
+
+function startAuditTrail(): void {
+  const db = getDatabase();
+  const pruned = pruneAudit(db);
+  if (pruned > 0) log.info({ pruned }, 'trimmed old audit entries');
+  trackAgentRunEnds(db);
 }
 
 function startPtyHost(): void {

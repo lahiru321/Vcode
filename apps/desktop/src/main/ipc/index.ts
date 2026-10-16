@@ -1,5 +1,6 @@
 import { registerAgentHandlers } from './agents';
 import { registerAppHandlers } from './app';
+import { registerAuditHandlers } from './audit';
 import { registerClipboardHandlers } from './clipboard';
 import { registerCredentialHandlers } from './credentials';
 import { registerDialogHandlers } from './dialog';
@@ -15,6 +16,7 @@ export { broadcastEvent, sendEvent } from './registry';
 /** Registers every IPC handler. Call before the first window loads. */
 export function registerIpcHandlers(): void {
   registerAppHandlers();
+  registerAuditHandlers();
   registerClipboardHandlers();
   registerAgentHandlers();
   registerCredentialHandlers();

@@ -36,6 +36,7 @@ export const INVOKE_CHANNELS = [
   'terminals:restart',
   'terminals:close',
   'terminals:rename',
+  'audit:list',
   'settings:get',
   'settings:set',
   'dialog:pickFolder',

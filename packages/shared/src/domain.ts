@@ -24,6 +24,25 @@ export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
 export const WORKSPACE_STATUSES = ['ready', 'missing', 'error'] as const;
 export type WorkspaceStatus = (typeof WORKSPACE_STATUSES)[number];
 
+/** What the audit log records (P7-05, V1 doc §21). */
+export const AUDIT_ACTIONS = [
+  'project.create',
+  'project.delete',
+  'terminal.start',
+  'terminal.stop',
+  'agent.start',
+  'agent.end',
+  'agent.create',
+  'agent.update',
+  'agent.delete',
+  'credential.create',
+  'credential.update',
+  'credential.delete',
+  'workspace.create',
+  'workspace.delete',
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
 /** Terminal sessions: the process itself. */
 export const SESSION_STATUSES = ['starting', 'running', 'exited', 'stopped', 'failed'] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];

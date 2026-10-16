@@ -277,7 +277,7 @@ export async function getWorkspaceFolder(db: AppDatabase, id: string): Promise<s
   return resolveWorkspaceFolder(project.rootPath, workspace.path);
 }
 
-function findWorkspace(db: AppDatabase, id: string): WorkspaceRow {
+export function findWorkspace(db: AppDatabase, id: string): WorkspaceRow {
   const workspace = db.select().from(workspaces).where(eq(workspaces.id, id)).get();
   if (!workspace) {
     throw new IpcError('NOT_FOUND', 'Workspace not found. It may have been deleted.');

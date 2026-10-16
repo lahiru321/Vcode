@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   AGENT_ADAPTERS,
   AGENT_SESSION_STATUSES,
+  AUDIT_ACTIONS,
   AGENT_STATUSES,
   CREDENTIAL_STATUSES,
   PROJECT_STATUSES,
@@ -428,6 +429,31 @@ export const TerminalIdRequest = z.strictObject({ terminalId: Id });
 
 export const RenameTerminalRequest = z.strictObject({ terminalId: Id, title: TerminalTitle });
 
+// Audit log (P7-05, V1 doc §21): read-only for the renderer.
+
+export const AuditEntry = z.object({
+  id: Id,
+  /** null: app-wide (e.g. API keys), or the project has since been removed. */
+  projectId: Id.nullable(),
+  projectName: z.string().nullable(),
+  action: z.enum(AUDIT_ACTIONS),
+  resourceType: z.string(),
+  resourceId: z.string().nullable(),
+  /** Names, statuses, paths: never secrets. */
+  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  createdAt: Timestamp,
+});
+export type AuditEntry = z.infer<typeof AuditEntry>;
+
+export const ListAuditRequest = z.strictObject({
+  /** Only this project's entries. */
+  projectId: Id.optional(),
+  /** Entries after this one, in the newest-first order (the next page). */
+  after: Id.optional(),
+  limit: z.number().int().min(1).max(500).optional(),
+});
+export type ListAuditRequest = z.infer<typeof ListAuditRequest>;
+
 /** Bounds of the `maxTerminals` setting. */
 export const MAX_TERMINALS = { min: 1, max: 64 } as const;
 
@@ -535,6 +561,11 @@ export const invokeContracts = {
   'terminals:close': { request: TerminalIdRequest, response: z.object({ terminalId: Id }) },
   /** The title shown on the terminal's tab; kept when it restarts. */
   'terminals:rename': { request: RenameTerminalRequest, response: TerminalSession },
+  /** Newest first. */
+  'audit:list': {
+    request: ListAuditRequest,
+    response: z.object({ entries: z.array(AuditEntry), hasMore: z.boolean() }),
+  },
   'settings:get': { request: NoPayload, response: Settings },
   'settings:set': { request: SetSettingsRequest, response: Settings },
   'dialog:pickFolder': { request: NoPayload, response: PickFolderResponse },
