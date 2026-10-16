@@ -9,6 +9,7 @@ import {
 } from 'electron';
 import { agentSessionEvents, listRunningAgents, type RunningAgent } from './agents/sessions';
 import { getDatabase } from './db';
+import { APP_ICON_PATH } from './icon';
 import { broadcastEvent } from './ipc';
 import { createLogger } from './logging';
 
@@ -17,51 +18,34 @@ import { createLogger } from './logging';
 const log = createLogger('tray');
 
 // ── Icon ─────────────────────────────────────────────────────────────────────────────────
-// Drawn in code until the app has an icon (P8-02): a blue rounded square with a white ">_"
-// prompt, and a green dot in the corner while agents are running. 16 px, plus a 2× copy.
+// The app icon at 16 px (plus a 2× copy), with a green dot in the corner while agents run.
 
-type Rgba = readonly [number, number, number, number];
-const BLUE: Rgba = [37, 99, 235, 255];
-const WHITE: Rgba = [255, 255, 255, 255];
-const GREEN: Rgba = [34, 197, 94, 255];
-const CLEAR: Rgba = [0, 0, 0, 0];
-
-const GRID = 16;
-/** Columns of the prompt's white cells per row (">" then "_"). */
-const PROMPT: Record<number, number[]> = {
-  4: [3, 4],
-  5: [4, 5],
-  6: [5, 6],
-  7: [6, 7],
-  8: [5, 6],
-  9: [4, 5],
-  10: [3, 4, 9, 10, 11, 12],
-  11: [9, 10, 11, 12],
-};
-
-/** The colour of cell (x, y) on the 16 × 16 grid. */
-export function iconPixel(x: number, y: number, running: boolean): Rgba {
-  if (running) {
-    const distance = (x - 12.5) ** 2 + (y - 12.5) ** 2;
-    if (distance <= 9) return GREEN;
-    // A transparent ring keeps the dot apart from the square.
-    if (distance <= 16) return CLEAR;
-  }
-  const inset = y === 0 || y === GRID - 1 ? 2 : y === 1 || y === GRID - 2 ? 1 : 0;
-  if (x < inset || x >= GRID - inset) return CLEAR;
-  return PROMPT[y]?.includes(x) ? WHITE : BLUE;
+/**
+ * Where the running dot goes on a `size` × `size` icon: `dot` (green), `ring` (cleared, to set
+ * it apart from the icon), or null (the icon shows).
+ */
+export function dotPixel(x: number, y: number, size: number): 'dot' | 'ring' | null {
+  const centre = size * 0.78;
+  const distance = Math.hypot(x + 0.5 - centre, y + 0.5 - centre);
+  if (distance <= size * 0.19) return 'dot';
+  if (distance <= size * 0.27) return 'ring';
+  return null;
 }
 
-function drawIcon(running: boolean): NativeImage {
+/** Green, as a raw bitmap's BGRA bytes. */
+const GREEN_BGRA = [94, 197, 34, 255];
+
+function trayIcon(source: NativeImage, running: boolean): NativeImage {
   const image = nativeImage.createEmpty();
   for (const scale of [1, 2]) {
-    const size = GRID * scale;
-    const buffer = Buffer.alloc(size * size * 4);
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const [r, g, b, a] = iconPixel(Math.floor(x / scale), Math.floor(y / scale), running);
-        // Raw bitmaps are BGRA.
-        buffer.set([b, g, r, a], (y * size + x) * 4);
+    const size = 16 * scale;
+    const buffer = source.resize({ width: size, height: size, quality: 'best' }).toBitmap();
+    if (running) {
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const spot = dotPixel(x, y, size);
+          if (spot) buffer.set(spot === 'dot' ? GREEN_BGRA : [0, 0, 0, 0], (y * size + x) * 4);
+        }
       }
     }
     image.addRepresentation({ scaleFactor: scale, width: size, height: size, buffer });
@@ -137,7 +121,11 @@ export interface AppTray {
  * status or end, and when a watched window is shown or hidden.
  */
 export function createTray(getWindow: () => BrowserWindow | null, quit: () => void): AppTray {
-  const icons = { idle: drawIcon(false), running: drawIcon(true) };
+  const source = nativeImage.createFromPath(APP_ICON_PATH);
+  if (source.isEmpty()) {
+    log.warn({ path: APP_ICON_PATH }, 'app icon missing; the tray icon will be blank');
+  }
+  const icons = { idle: trayIcon(source, false), running: trayIcon(source, true) };
   const tray = new Tray(icons.idle);
 
   const toggleWindow = () => {

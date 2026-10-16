@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { APP_NAME } from '@vcode/shared';
-import { FolderPlus, KeyRound, Layers, Plus, Settings } from 'lucide-react';
+import { FolderPlus, KeyRound, Plus, Settings } from 'lucide-react';
+import logo from '@renderer/assets/logo.png';
 import { Button } from '@renderer/components/ui/button';
 import { ScrollArea } from '@renderer/components/ui/scroll-area';
 import { Separator } from '@renderer/components/ui/separator';
@@ -24,9 +25,7 @@ export function Sidebar() {
   return (
     <aside className="flex min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex h-12 items-center gap-2 px-4">
-        <div className="flex size-6 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-          <Layers className="size-3.5" />
-        </div>
+        <img src={logo} alt="" className="size-6 rounded-md" />
         <span className="text-sm font-semibold tracking-tight">{APP_NAME}</span>
       </div>
 

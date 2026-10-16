@@ -4,6 +4,7 @@ import { APP_NAME } from '@vcode/shared';
 import { app, BrowserWindow, dialog } from 'electron';
 import { closeDatabase, initDatabase } from './db';
 import { broadcastEvent, registerIpcHandlers } from './ipc';
+import { APP_ICON_PATH } from './icon';
 import { closeLogging, createLogger, initLogging, levelFromEnv } from './logging';
 import { ptyHost } from './pty-host';
 import { allowQuit, handleWindowClose, quitNow } from './quit';
@@ -61,6 +62,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: WINDOW_SIZE.minHeight,
     show: false,
     title: APP_NAME,
+    icon: APP_ICON_PATH,
     // Matches the renderer's dark --background token to avoid a flash on load.
     backgroundColor: '#0a0a0a',
     autoHideMenuBar: true,

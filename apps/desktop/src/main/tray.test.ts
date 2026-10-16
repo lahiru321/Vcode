@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { iconPixel, runningSummary, trayMenuTemplate, type TrayActions } from './tray';
+import { dotPixel, runningSummary, trayMenuTemplate, type TrayActions } from './tray';
 
 vi.mock('electron', () => ({ Menu: {}, nativeImage: {}, Tray: class {}, shell: {} }));
 vi.mock('./ipc', () => ({ broadcastEvent: vi.fn() }));
@@ -53,18 +53,13 @@ describe('trayMenuTemplate', () => {
   });
 });
 
-describe('iconPixel', () => {
-  const at = (x: number, y: number, running = false) => iconPixel(x, y, running).join(',');
-
-  it('draws a rounded square with a white prompt', () => {
-    expect(at(0, 0)).toBe('0,0,0,0'); // rounded corner
-    expect(at(8, 2)).toBe('37,99,235,255'); // blue
-    expect(at(6, 7)).toBe('255,255,255,255'); // tip of ">"
-  });
-
-  it('adds a green dot, set apart by a clear ring, while agents run', () => {
-    expect(at(12, 12, true)).toBe('34,197,94,255');
-    expect(at(12, 9, true)).toBe('0,0,0,0');
-    expect(at(12, 12, false)).not.toBe('34,197,94,255');
+describe('dotPixel', () => {
+  it('puts a green dot in the bottom-right corner, with a clear ring around it', () => {
+    expect(dotPixel(12, 12, 16)).toBe('dot');
+    expect(dotPixel(12, 8, 16)).toBe('ring');
+    expect(dotPixel(4, 4, 16)).toBeNull();
+    // Scales with the icon.
+    expect(dotPixel(24, 24, 32)).toBe('dot');
+    expect(dotPixel(8, 8, 32)).toBeNull();
   });
 });

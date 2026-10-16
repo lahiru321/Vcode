@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 import { copyMigrations } from './build/copy-migrations';
+import { copyResources } from './build/copy-resources';
 import { contentSecurityPolicy } from './build/csp';
 
 // Workspace packages ship TypeScript source, so main must bundle them instead of
@@ -21,7 +22,7 @@ export default defineConfig({
         },
       },
     },
-    plugins: [copyMigrations()],
+    plugins: [copyMigrations(), copyResources()],
   },
   preload: {
     build: {
