@@ -48,7 +48,8 @@ test('runs a command in a real shell, and brings the layout back after a restart
   mkdirSync(root);
   app = await launchApp(userData);
   const project = await addProject(app, root);
-  await expect(app.page.getByText(root)).toBeVisible();
+  // The heading, not the path: the header hides the path in a narrow window (CI's screens).
+  await expect(app.page.getByRole('heading', { level: 1, name: 'shop' })).toBeVisible();
 
   // A new shell (Ctrl+Shift+T; Cmd on macOS), then a command typed into it.
   await app.page.keyboard.press('ControlOrMeta+Shift+T');
@@ -75,7 +76,8 @@ test('runs a command in a real shell, and brings the layout back after a restart
     .not.toBeNull();
   await app.close();
   app = await launchApp(userData);
-  await expect(app.page.getByText(root)).toBeVisible();
+  // The heading, not the path: the header hides the path in a narrow window (CI's screens).
+  await expect(app.page.getByRole('heading', { level: 1, name: 'shop' })).toBeVisible();
   // The ended panel: the terminal's screen is gone, so it offers a restart.
   const ended = app.page.getByText(/Restart it to run/);
   await expect(ended).toBeVisible();
