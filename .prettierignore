@@ -3,6 +3,8 @@ dist/
 out/
 release/
 coverage/
+test-results/
+playwright-report/
 pnpm-lock.yaml
 docs/
 *.md

@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --parallel typecheck",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "pnpm --filter @vcode/desktop e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

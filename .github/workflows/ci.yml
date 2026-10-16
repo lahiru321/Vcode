@@ -1,4 +1,5 @@
-# Lint, typecheck and unit tests on Windows and macOS for every push and pull request.
+# Lint, typecheck and unit tests, and end-to-end smoke tests of the built app (P7-08), on
+# Windows and macOS for every push and pull request.
 # macOS runs from day one so the later macOS release stays cheap (V1 doc §6, ROADMAP ground rules).
 name: CI
 
@@ -51,3 +52,43 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
+
+  e2e:
+    name: e2e ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # pnpm doesn't always run Electron's download script; it skips the download if it's there.
+      - name: Electron binary
+        run: node apps/desktop/node_modules/electron/install.js
+
+      - name: Build
+        run: pnpm build
+
+      - name: End-to-end smoke tests
+        run: pnpm e2e
+
+      - name: Upload the report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report-${{ matrix.os }}
+          path: |
+            apps/desktop/playwright-report
+            apps/desktop/test-results
+          retention-days: 7

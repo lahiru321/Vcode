@@ -6,10 +6,22 @@ import { describe, expect, it } from 'vitest';
 import { tempDir } from '../src/main/testing';
 import { applyFuses, FUSES } from './fuses';
 
-// Outside Electron, the `electron` package exports the path of its executable.
-const electronPath = createRequire(import.meta.url)('electron') as string;
+/**
+ * Outside Electron, the `electron` package exports the path of its executable; it throws when
+ * the binary wasn't downloaded (CI's unit-test job skips it).
+ */
+function findElectron(): string | null {
+  try {
+    const path = createRequire(import.meta.url)('electron') as string;
+    return existsSync(path) ? path : null;
+  } catch {
+    return null;
+  }
+}
+const found = findElectron();
+const electronPath = found ?? '';
 
-describe('Electron fuses', () => {
+describe.runIf(found !== null)('Electron fuses', () => {
   it('decides every fuse this Electron has', async () => {
     const wire = await getCurrentFuseWire(electronPath);
     const known = Object.keys(wire).filter((key) => key !== 'version');
@@ -18,7 +30,7 @@ describe('Electron fuses', () => {
   });
 
   // Copies the ~200 MB executable: once, on the platform the app ships on first.
-  it.runIf(existsSync(electronPath) && basename(electronPath).endsWith('.exe'))(
+  it.runIf(basename(electronPath).endsWith('.exe'))(
     'flips them in a copy of the executable',
     { timeout: 60_000 },
     async () => {

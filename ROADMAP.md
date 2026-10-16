@@ -31,10 +31,12 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P7 — Desktop Polish & Hardening
+**Current phase:** P7 — Desktop Polish & Hardening (built; waiting for the first CI run of the e2e job and the owner's Done-when check)
 
 **Next up:**
-1. `P7-08` End-to-end smoke tests with Playwright for Electron
+1. Push, and check the new `e2e` CI job passes on Windows and macOS
+2. P7 Done-when check by the owner: tray menu items, close to tray, the quit confirmation and a real notification click
+3. `P8-01` electron-builder config: NSIS installer, Windows x64
 
 ---
 
@@ -48,7 +50,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | Done |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | Done |
-| P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | In progress |
+| P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | Built; CI + owner check |
 | P8 | Distribution | Signed Windows installer with auto-update | M | To do |
 | — | macOS Release | Same app on macOS | M | After V1 |
 | — | V2+ | Orchestration, verification, project memory | — | Later |
@@ -283,7 +285,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-16:* Every §21 item reviewed against the code and written up with where it is enforced and how it is tested: **`docs/security-checklist.md`** (15 done, fuses done but applied in P8, Authenticode signing in P8-03). Gaps fixed: **fuses** — `build/fuses.ts` (`@electron/fuses`) decides every fuse with `strictlyRequireAllFuses` (RunAsNode, NODE_OPTIONS, `--inspect` off; OnlyLoadAppFromAsar, ASAR integrity, cookie encryption on; no extra file:// privileges); `build/fuses.test.ts` (new `apps/desktop/build/**` test glob) checks every fuse of this Electron is decided and flips a copy of the executable; by hand, a fused copy started with `ELECTRON_RUN_AS_NODE=1` no longer runs as Node while the original does. **Electron 44.5.1 → 44.8.0** (latest 44.x; better-sqlite3 and node-pty already latest); the app, terminals, agents and database checked on it. Note: pnpm doesn't run Electron's download script here, so after a version change run `node apps/desktop/node_modules/electron/install.js`.
 - [x] **P7-07** · Setting for the maximum number of concurrent terminals · `S`
   - *2026-10-16:* New setting **`maxTerminals`** (default 16, 1–64, `MAX_TERMINALS` in shared): shells and agents together, across all projects. `createTerminal` counts sessions that are `starting` / `running` and refuses with `CONFLICT` "2 terminals are already running, the most allowed. Stop one, or raise the limit in Settings." — once before anything is resolved or spawned, and again inside the insert transaction so terminals started at the same moment can't pass together. A restart at the limit works (the old one stops first). Settings dialog: a number field, saved on Enter / blur; anything out of range snaps back. Checked in the built app: default 16; 0 snapped back; 2 saved; the third Ctrl+Shift+T showed the message as a toast, two terminals running.
-- [ ] **P7-08** · End-to-end smoke tests with Playwright for Electron · `M`
+- [x] **P7-08** · End-to-end smoke tests with Playwright for Electron · `M`
+  - *2026-10-16:* `@playwright/test` driving the built app (`_electron`), in `apps/desktop/e2e/` (own `tsconfig.json`, part of `typecheck`): `pnpm build && pnpm e2e`. `app.ts` starts the app with its own user-data folder (so the single-instance lock and the real `%APPDATA%\Vcode` aren't touched), collects page errors, calls IPC through `window.vcode`, and closes by `app.exit` and waiting for the process (so the database is let go). `smoke.spec.ts`: (1) starts with the window, "No projects yet", Ready, and no page errors; (2) a project (through IPC — the native picker can't be driven), a new shell with Ctrl/Cmd+Shift+T, `echo vcode-e2e > e2e-proof.txt` typed into it and the file appearing (the terminal draws to a canvas), then a relaunch brings the project and the ended panel with Restart back; (3) notifications turned off in Settings stay off after a relaunch, and the audit log shows the workspace and project entries, newest first. CI: new `e2e` job (Windows + macOS): install → Electron's download script (pnpm doesn't always run it) → `pnpm build` → `pnpm e2e`, the HTML report and traces uploaded on failure. The fuses test now skips when the Electron binary isn't installed (the unit-test job skips the download). Locally: 3 passed, three runs in a row (~7 s). Not yet run in CI (needs a push).
 
 **Done when:**
 - Tray, close-to-tray, quit confirmation and notifications all work.
