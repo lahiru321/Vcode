@@ -18,6 +18,7 @@ import {
   DeleteWorkspaceDialog,
   type NewWorkspace,
 } from './WorkspaceDialogs';
+import { useWorkspaceChanges } from './useWorkspaceChanges';
 
 // The workspace manager (P6-02, V1 doc §17): the selected project's workspaces in the sidebar,
 // with create, delete, and opening a terminal in one.
@@ -32,6 +33,8 @@ export interface WorkspaceLauncher {
 
 interface WorkspacesContextValue {
   workspaces: Workspace[];
+  /** Uncommitted-change count per workspace id, for those that could be checked. */
+  changes: Record<string, number>;
   loaded: boolean;
   loadError: string | null;
   reload: () => Promise<void>;
@@ -131,9 +134,11 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loaded = projectId !== null && list.projectId === projectId;
+  const changes = useWorkspaceChanges(list.projectId, list.workspaces);
   const value = useMemo<WorkspacesContextValue>(
     () => ({
       workspaces: loaded ? list.workspaces : [],
+      changes: loaded ? changes : {},
       loaded,
       loadError,
       reload,
@@ -142,7 +147,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
       launcher,
       registerLauncher,
     }),
-    [loaded, list, loadError, reload, launcher, registerLauncher],
+    [loaded, list, changes, loadError, reload, launcher, registerLauncher],
   );
 
   const close = () => setDialog(null);

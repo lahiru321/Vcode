@@ -62,7 +62,9 @@ export function WorkspaceList() {
 }
 
 function WorkspaceRow({ workspace }: { workspace: Workspace }) {
-  const { launcher, startDelete } = useWorkspaces();
+  const { launcher, startDelete, changes } = useWorkspaces();
+  const changed = changes[workspace.id] ?? 0;
+  const changedLabel = changed === 1 ? '1 uncommitted change' : `${changed} uncommitted changes`;
   const Icon = KIND_ICON[workspace.kind];
   const problem = PROBLEM[workspace.status];
   const usable = launcher !== null && !problem;
@@ -77,7 +79,9 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }) {
     <div className="group/row relative flex h-8 items-center rounded-md text-sm hover:bg-sidebar-accent/50">
       <button
         type="button"
-        title={[workspace.path, problem].filter(Boolean).join(' · ')}
+        title={[workspace.path, workspace.branch, changed > 0 && changedLabel, problem]
+          .filter(Boolean)
+          .join(' · ')}
         disabled={!usable}
         className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-14 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:cursor-default"
         onClick={() => launcher?.openDialog(workspace)}
@@ -93,6 +97,15 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }) {
         {workspace.branch && (
           <span className="min-w-0 shrink truncate font-mono text-[11px] text-muted-foreground">
             {workspace.branch}
+          </span>
+        )}
+        {changed > 0 && (
+          <span
+            aria-label={changedLabel}
+            className="flex shrink-0 items-center gap-1 font-mono text-[11px] text-warning"
+          >
+            <span className="size-1.5 rounded-full bg-warning" />
+            {changed}
           </span>
         )}
         {problem && (

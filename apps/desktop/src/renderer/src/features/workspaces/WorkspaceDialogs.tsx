@@ -266,19 +266,20 @@ export function DeleteWorkspaceDialog({
   );
 }
 
-/** A worktree's uncommitted changes, checked when the dialog opens. */
+/** A worktree's uncommitted changes, checked when the dialog opens (undefined until then). */
 function useChanges(workspace: Workspace) {
   const checks = workspace.kind === 'worktree' && workspace.status === 'ready';
-  const [state, setState] = useState<{ changes: WorkspaceChanges | null; error: string | null }>({
-    changes: null,
-    error: null,
-  });
+  const [state, setState] = useState<{
+    changes: WorkspaceChanges | null | undefined;
+    error: string | null;
+  }>({ changes: undefined, error: null });
   useEffect(() => {
     if (!checks) return;
     let cancelled = false;
     invoke('workspaces:changes', { id: workspace.id }).then(
       (changes) => !cancelled && setState({ changes, error: null }),
-      (error: unknown) => !cancelled && setState({ changes: null, error: errorMessage(error) }),
+      (error: unknown) =>
+        !cancelled && setState({ changes: undefined, error: errorMessage(error) }),
     );
     return () => {
       cancelled = true;
@@ -297,7 +298,7 @@ function DeleteWorkspaceBody({
   const { checks, changes, error: changesError } = useChanges(workspace);
   const dirty = (changes?.count ?? 0) > 0;
   const { pending, error, submit } = useSubmit(() => onDelete(workspace, dirty));
-  const checking = checks && changes === null && changesError === null;
+  const checking = checks && changes === undefined && changesError === null;
 
   let description: string;
   if (workspace.kind !== 'worktree') {

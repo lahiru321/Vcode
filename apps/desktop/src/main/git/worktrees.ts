@@ -49,11 +49,18 @@ export async function addWorktree(
 }
 
 /**
- * Uncommitted changes in a worktree, as `git status --porcelain` lines (untracked files
- * included, ignored ones not).
+ * Uncommitted changes in the working tree at `folder`, as `git status --porcelain` lines
+ * (untracked files included, ignored ones not). With `within` (relative to `folder`), only the
+ * changes inside that subfolder.
  */
-export async function uncommittedChanges(folder: string): Promise<string[]> {
-  const output = await git(folder, ['status', '--porcelain=v1', '--untracked-files=normal']);
+export async function uncommittedChanges(folder: string, within?: string): Promise<string[]> {
+  const pathspec = within === undefined ? [] : ['--', `:(literal)${within.replace(/\\/g, '/')}`];
+  const output = await git(folder, [
+    'status',
+    '--porcelain=v1',
+    '--untracked-files=normal',
+    ...pathspec,
+  ]);
   return output.split(/\r?\n/).filter(Boolean);
 }
 

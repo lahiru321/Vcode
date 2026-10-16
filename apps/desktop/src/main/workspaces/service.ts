@@ -1,5 +1,5 @@
 import { mkdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import {
   IpcError,
   slugify,
@@ -100,12 +100,14 @@ async function checkStatus(project: ProjectRow, workspace: WorkspaceRow): Promis
 /**
  * The project's workspaces, `main` first (created if missing), then by name. Each folder is
  * checked now and its status saved: `missing` when it's gone, `error` when it no longer passes
- * the path guards (e.g. swapped for a link out of the project). A worktree's branch is read
- * again too, as another one may have been checked out in it.
+ * the path guards (e.g. swapped for a link out of the project). Branches are read again too
+ * (P6-06): `main` and folder workspaces show what the project folder has checked out (they are
+ * the same working tree), a worktree what it has.
  */
 export async function listWorkspaces(db: AppDatabase, projectId: string): Promise<WorkspaceRow[]> {
   const project = getProject(db, projectId);
   const main = ensureMainWorkspace(db, project);
+  const projectBranch = (await detectGitRepository(project.rootPath))?.branch ?? null;
   const others = db
     .select()
     .from(workspaces)
@@ -117,7 +119,9 @@ export async function listWorkspaces(db: AppDatabase, projectId: string): Promis
     [main, ...others].map(async (workspace) => {
       const status = await checkStatus(project, workspace);
       let { branch } = workspace;
-      if (workspace.kind === 'worktree' && status === 'ready') {
+      if (workspace.kind !== 'worktree') {
+        branch = projectBranch;
+      } else if (status === 'ready') {
         branch = (await detectGitRepository(workspace.path))?.branch ?? null;
       }
       if (status === workspace.status && branch === workspace.branch) {
@@ -276,18 +280,35 @@ function findWorkspace(db: AppDatabase, id: string): WorkspaceRow {
 
 const LISTED_CHANGES = 20;
 
-/** Uncommitted changes in a worktree workspace whose folder is there; none for the others. */
-export async function getWorkspaceChanges(db: AppDatabase, id: string): Promise<WorkspaceChanges> {
+/**
+ * Uncommitted changes in a workspace: a worktree's own; for `main` the whole project folder's;
+ * for a folder workspace those inside its folder. Null when there's nothing to check: the folder
+ * isn't there (or no longer inside the project), or it isn't in a Git repository.
+ */
+export async function getWorkspaceChanges(
+  db: AppDatabase,
+  id: string,
+): Promise<WorkspaceChanges | null> {
   const workspace = findWorkspace(db, id);
-  if (workspace.kind !== 'worktree') {
-    return { count: 0, files: [] };
-  }
   const project = getProject(db, workspace.projectId);
   if ((await checkStatus(project, workspace)) !== 'ready') {
-    return { count: 0, files: [] };
+    return null;
   }
-  const changes = await uncommittedChanges(workspace.path);
-  return { count: changes.length, files: changes.slice(0, LISTED_CHANGES) };
+  const changes = await changesIn(project, workspace);
+  return changes && { count: changes.length, files: changes.slice(0, LISTED_CHANGES) };
+}
+
+/** `git status` lines for a workspace whose folder is ready; null if it isn't in a repository. */
+async function changesIn(project: ProjectRow, workspace: WorkspaceRow): Promise<string[] | null> {
+  // Its own repository root only: in a folder without one, git would report the project's.
+  const gitRoot = workspace.kind === 'worktree' ? workspace.path : project.rootPath;
+  if (!(await detectGitRepository(gitRoot))) {
+    return null;
+  }
+  if (workspace.kind === 'folder') {
+    return uncommittedChanges(gitRoot, relative(project.rootPath, workspace.path));
+  }
+  return uncommittedChanges(gitRoot);
 }
 
 /**
@@ -315,7 +336,7 @@ export async function deleteWorkspace(
     const status = await checkStatus(project, workspace);
     if (status === 'ready') {
       if (!force) {
-        const { length } = await uncommittedChanges(workspace.path);
+        const length = (await changesIn(project, workspace))?.length ?? 0;
         if (length > 0) {
           const changes = length === 1 ? '1 uncommitted change' : `${length} uncommitted changes`;
           throw new IpcError(

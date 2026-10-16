@@ -332,7 +332,7 @@ export const DeleteWorkspaceResponse = z.object({
   removedFolder: z.boolean(),
 });
 
-/** Uncommitted changes in a workspace (worktrees only; others always have none). */
+/** Uncommitted changes in a workspace (P6-04, P6-06). */
 export const WorkspaceChanges = z.object({
   count: z.number().int().nonnegative(),
   /** Up to the first 20, as `git status --porcelain` lines. */
@@ -489,7 +489,11 @@ export const invokeContracts = {
    * and for a worktree with uncommitted changes unless `force`.
    */
   'workspaces:delete': { request: DeleteWorkspaceRequest, response: DeleteWorkspaceResponse },
-  'workspaces:changes': { request: WorkspaceIdRequest, response: WorkspaceChanges },
+  /**
+   * A worktree's own changes; `main`: the project folder's; a folder workspace: those inside it.
+   * Null if the folder is missing or not in a Git repository. UNAVAILABLE without git.
+   */
+  'workspaces:changes': { request: WorkspaceIdRequest, response: WorkspaceChanges.nullable() },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
   'terminals:attach': {

@@ -143,6 +143,73 @@ describe('worktree workspaces', () => {
     );
   });
 
+  it('shows the project branch on main and folder workspaces (P6-06)', async () => {
+    const { db, root, project } = await setup();
+    await createWorkspace(db, { projectId: project.id, name: 'docs', kind: 'folder' });
+    gitSync(root, 'switch', '--quiet', '-c', 'next');
+    const branches = (await listWorkspaces(db, project.id)).map((w) => [w.name, w.branch]);
+    expect(branches).toEqual([
+      ['main', 'next'],
+      ['docs', 'next'],
+    ]);
+  });
+
+  it('counts changes per workspace: whole project, inside a folder, in a worktree (P6-06)', async () => {
+    const { db, root, project } = await setup();
+    mkdirSync(join(root, 'backend'));
+    writeFileSync(join(root, 'backend', 'app.ts'), 'x\n');
+    gitSync(root, 'add', '.');
+    gitSync(root, 'commit', '--quiet', '-m', 'backend');
+    const [main] = await listWorkspaces(db, project.id);
+    const backend = await createWorkspace(db, {
+      projectId: project.id,
+      name: 'backend',
+      kind: 'folder',
+      path: 'backend',
+    });
+    const tree = await createWorkspace(db, {
+      projectId: project.id,
+      name: 'agent',
+      kind: 'worktree',
+      branch: 'agent',
+    });
+
+    expect(await getWorkspaceChanges(db, backend.id)).toEqual({ count: 0, files: [] });
+    writeFileSync(join(root, 'README.md'), 'changed\n');
+    writeFileSync(join(root, 'backend', 'app.ts'), 'y\n');
+    writeFileSync(join(tree.path, 'new.txt'), 'new\n');
+
+    expect(await getWorkspaceChanges(db, main!.id)).toEqual({
+      count: 2,
+      files: [' M README.md', ' M backend/app.ts'],
+    });
+    expect(await getWorkspaceChanges(db, backend.id)).toEqual({
+      count: 1,
+      files: [' M backend/app.ts'],
+    });
+    expect(await getWorkspaceChanges(db, tree.id)).toEqual({ count: 1, files: ['?? new.txt'] });
+  });
+
+  it('has no changes to report for a plain folder, a missing folder or a broken worktree', async () => {
+    const { db, project } = await setup();
+    const plain = await createProject(db, { rootPath: tempDir() });
+    const [plainMain] = await listWorkspaces(db, plain.id);
+    const gone = await createWorkspace(db, { projectId: project.id, name: 'gone', kind: 'folder' });
+    const broken = await createWorkspace(db, {
+      projectId: project.id,
+      name: 'broken',
+      kind: 'worktree',
+      branch: 'broken',
+    });
+    rmSync(gone.path, { recursive: true });
+    // Without its .git file, git would report the project's changes from inside it.
+    rmSync(join(broken.path, '.git'));
+
+    expect(await getWorkspaceChanges(db, plainMain!.id)).toBeNull();
+    expect(await getWorkspaceChanges(db, gone.id)).toBeNull();
+    expect(await getWorkspaceChanges(db, broken.id)).toBeNull();
+  });
+
   it('removes a clean worktree with its folder; the branch stays', async () => {
     const { db, root, project } = await setup();
     const workspace = await createWorkspace(db, {
