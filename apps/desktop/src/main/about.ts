@@ -9,7 +9,7 @@ export function configureAbout(): void {
     applicationName: APP_NAME,
     applicationVersion: app.getVersion(),
     version: `Electron ${process.versions.electron} · Node ${process.versions.node}`,
-    copyright: `© ${new Date().getFullYear()} lahiru321`,
+    copyright: `© ${new Date().getFullYear()} Lahiru Samarahewa`,
     website: APP_REPO_URL,
     iconPath: APP_ICON_PATH,
   });
