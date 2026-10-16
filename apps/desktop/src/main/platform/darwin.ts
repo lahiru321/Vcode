@@ -187,4 +187,8 @@ export const darwin: Platform = {
   processInfo,
   loadUserEnvironment,
   revealInFileManager: (path) => shell.showItemInFolder(path),
+  vsCodeLocations: (env) =>
+    ['/Applications', ...(env['HOME'] ? [join(env['HOME'], 'Applications')] : [])].map((apps) =>
+      join(apps, 'Visual Studio Code.app', 'Contents', 'Resources', 'app', 'bin', 'code'),
+    ),
 };

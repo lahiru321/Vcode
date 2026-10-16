@@ -27,6 +27,8 @@ export const AppInfo = z.object({
   version: z.string(),
   /** For the renderer's keyboard shortcuts (Cmd on macOS, Ctrl elsewhere) and labels. */
   platform: z.enum(['win32', 'darwin']),
+  /** "Explorer" / "Finder", for "Reveal in …". */
+  fileManagerName: z.string(),
   versions: z.object({
     electron: z.string(),
     chrome: z.string(),
@@ -494,6 +496,10 @@ export const invokeContracts = {
    * Null if the folder is missing or not in a Git repository. UNAVAILABLE without git.
    */
   'workspaces:changes': { request: WorkspaceIdRequest, response: WorkspaceChanges.nullable() },
+  /** Shows the workspace folder in Explorer / Finder. INVALID_REQUEST if it fails the path guards. */
+  'workspaces:reveal': { request: WorkspaceIdRequest, response: z.null() },
+  /** Opens the workspace folder in VS Code. UNAVAILABLE if VS Code isn't installed. */
+  'workspaces:openInEditor': { request: WorkspaceIdRequest, response: z.null() },
   'terminals:list': { request: ListTerminalsRequest, response: z.array(TerminalSession) },
   'terminals:create': { request: CreateTerminalRequest, response: TerminalSession },
   'terminals:attach': {

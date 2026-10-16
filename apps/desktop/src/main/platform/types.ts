@@ -69,4 +69,10 @@ export interface Platform {
 
   /** Opens the system file manager with `path` selected. */
   revealInFileManager(path: string): void;
+
+  /**
+   * Where VS Code's `code` command is when it isn't on PATH: the default install folders
+   * (absolute paths; they may not exist).
+   */
+  vsCodeLocations(env: Environment): string[];
 }

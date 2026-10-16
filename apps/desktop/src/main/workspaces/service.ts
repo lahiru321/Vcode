@@ -270,6 +270,13 @@ async function createWorktreeWorkspace(
   }
 }
 
+/** A workspace's folder, checked against the path guards now (it may have moved or changed). */
+export async function getWorkspaceFolder(db: AppDatabase, id: string): Promise<string> {
+  const workspace = findWorkspace(db, id);
+  const project = getProject(db, workspace.projectId);
+  return resolveWorkspaceFolder(project.rootPath, workspace.path);
+}
+
 function findWorkspace(db: AppDatabase, id: string): WorkspaceRow {
   const workspace = db.select().from(workspaces).where(eq(workspaces.id, id)).get();
   if (!workspace) {

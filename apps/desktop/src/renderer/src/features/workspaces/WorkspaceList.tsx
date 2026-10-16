@@ -1,6 +1,8 @@
 import type { Workspace, WorkspaceKind } from '@vcode/shared';
 import {
   AlertTriangle,
+  Code2,
+  ExternalLink,
   Folder,
   FolderGit2,
   FolderRoot,
@@ -18,6 +20,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu';
+import { useAppInfo } from '@renderer/lib/app-info';
+import { errorMessage } from '@renderer/lib/form';
+import { invoke } from '@renderer/lib/ipc';
+import { toast } from 'sonner';
 import { useWorkspaces } from './WorkspacesProvider';
 
 // Workspace rows for the sidebar's Workspaces section (P6-02): the selected project's `main`
@@ -61,7 +67,15 @@ export function WorkspaceList() {
   );
 }
 
+/** Reveal / Open in VS Code: these work for any project, archived ones included. */
+function openWith(channel: 'workspaces:reveal' | 'workspaces:openInEditor', workspace: Workspace) {
+  invoke(channel, { id: workspace.id }).catch((error: unknown) =>
+    toast.error(`Couldn’t open “${workspace.name}”`, { description: errorMessage(error) }),
+  );
+}
+
 function WorkspaceRow({ workspace }: { workspace: Workspace }) {
+  const fileManager = useAppInfo()?.fileManagerName ?? 'file manager';
   const { launcher, startDelete, changes } = useWorkspaces();
   const changed = changes[workspace.id] ?? 0;
   const changedLabel = changed === 1 ? '1 uncommitted change' : `${changed} uncommitted changes`;
@@ -147,6 +161,21 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }) {
             <DropdownMenuItem disabled={!usable} onSelect={() => launcher?.openDialog(workspace)}>
               <TerminalSquare />
               New terminal here…
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={Boolean(problem)}
+              onSelect={() => openWith('workspaces:reveal', workspace)}
+            >
+              <ExternalLink />
+              Reveal in {fileManager}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={Boolean(problem)}
+              onSelect={() => openWith('workspaces:openInEditor', workspace)}
+            >
+              <Code2 />
+              Open in VS Code
             </DropdownMenuItem>
             {deletable && (
               <>

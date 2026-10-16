@@ -27,6 +27,8 @@ export const INVOKE_CHANNELS = [
   'workspaces:create',
   'workspaces:delete',
   'workspaces:changes',
+  'workspaces:reveal',
+  'workspaces:openInEditor',
   'terminals:list',
   'terminals:create',
   'terminals:attach',

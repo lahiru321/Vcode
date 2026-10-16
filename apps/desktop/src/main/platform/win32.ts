@@ -278,4 +278,12 @@ export const win32: Platform = {
   processInfo,
   loadUserEnvironment,
   revealInFileManager: (path) => shell.showItemInFolder(path),
+  vsCodeLocations: (env) =>
+    [
+      // User install (the default), then system install.
+      [getEnv(env, 'LOCALAPPDATA'), 'Programs'],
+      [getEnv(env, 'ProgramFiles')],
+    ]
+      .filter((parts): parts is string[] => parts[0] !== undefined && parts[0] !== '')
+      .map((parts) => join(...parts, 'Microsoft VS Code', 'bin', 'code.cmd')),
 };

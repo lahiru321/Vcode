@@ -31,11 +31,11 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P6 — Workspace & Git
+**Current phase:** P6 — Workspace & Git (built; waiting for the owner's Done-when check)
 
 **Next up:**
-1. `P6-07` Reveal in Explorer / Open in VS Code
-2. P6 Done-when check by the owner: agents in their own worktrees on their own branches, deleting one removes its worktree
+1. P6 Done-when check by the owner: agents in their own worktrees on their own branches, deleting one removes its worktree
+2. `P7-01` System tray with running-agent count
 
 ---
 
@@ -48,7 +48,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | Done |
-| P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | In progress |
+| P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | Built; owner check |
 | P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | To do |
 | P8 | Distribution | Signed Windows installer with auto-update | M | To do |
 | — | macOS Release | Same app on macOS | M | After V1 |
@@ -254,7 +254,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-15:* `src/main/fs/folders.ts`: `isInsideFolder(root, path)` (by `path.relative`, so `shop-2` isn't inside `shop` and a `..name` folder is), **`resolveWorkspaceFolder(projectRoot, input)`** for an existing folder (relative = from the root; the root and the folder are both `realpath`ed, so a junction / symlink anywhere on the way is followed before the check; the root itself is allowed — that's `main`) and **`planWorkspaceFolder(projectRoot, input)`** for a folder about to be created (its deepest existing ancestor is `realpath`ed and the rest appended; must be strictly inside the root). Both refuse with `INVALID_REQUEST` "Workspaces must be inside the project folder: …". Done ahead of P6-02 so the create paths use them from the start. Terminals now check their workspace with `resolveWorkspaceFolder` on **every** start and restart (not only at creation), so a workspace folder later swapped for a link out of the project can't be started in. Tests: inside / outside / `..` / sibling-prefix cases, a junction pointing out (refused) and in (resolved to its target), a root reached through a link, a missing root, a planned folder under a junction pointing out, and a terminal refusing a swapped workspace folder before anything is spawned.
 - [x] **P6-06** · Branch name + uncommitted-changes indicator per workspace in the sidebar · `M`
   - *2026-10-16:* `workspaces:list` keeps every branch current: `main` and folder workspaces show what the project folder has checked out (same working tree; read from `.git`, no process), worktrees what they have. `workspaces:changes` now covers every kind and returns `null` when there's nothing to check: `main` → `git status` of the whole project folder; a folder workspace → only the changes inside its folder (`-- :(literal)<folder>`); a worktree → its own, and only if its `.git` file is still there (otherwise git would report the project's changes from inside it). The delete check uses the same. Renderer: `useWorkspaceChanges` asks for every ready workspace when the list loads and every 15 s while the window is visible (agents change files while it stays focused); the sidebar row shows an amber dot + count after the branch, and "N uncommitted changes" in its tooltip. Checked in the built app: clean repo → no dots; edits in `backend/` and two new files in a worktree, window left focused → `main 1`, `Backend 1`, `Agent 2` within 15 s; `git switch -c next` in the project folder → main and Backend show `next` on the next focus, the worktree keeps `claude/agent`.
-- [ ] **P6-07** · Reveal in Explorer / Open in VS Code · `S`
+- [x] **P6-07** · Reveal in Explorer / Open in VS Code · `S`
+  - *2026-10-16:* New channels **`workspaces:reveal { id }`** and **`workspaces:openInEditor { id }`**: the folder comes from the workspace record and is checked with `resolveWorkspaceFolder` first (so one swapped for a link out of the project is refused); the renderer never sends a path. Reveal uses `platform.revealInFileManager` (`shell.showItemInFolder`, which never runs anything). VS Code: `code` on the user's PATH (the same environment terminals get), else the new `platform.vsCodeLocations(env)` (Windows: `%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd`, then `%ProgramFiles%\…`; macOS: `/Applications` and `~/Applications`), started detached; not found → `UNAVAILABLE` "VS Code was not found…". `app:getInfo` now returns `fileManagerName` for the label; the renderer asks once (`useAppInfo`). Workspace ⋯ menu: Reveal in Explorer / Open in VS Code, disabled for a missing or outside folder; failures show a toast. Checked in the built app: the menu shows both; Open in VS Code opened a "vcode-p607-shop" window; reveal → ok; a folder swapped for a junction out → both refused with the path-guard message and the menu items disabled.
 
 **Done when:**
 - Each agent can run in its own worktree on its own branch.
@@ -382,5 +383,6 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-15** — P5-04 adds `clipboard:writeText` and `clipboard:paste` rather than allowing clipboard permissions for the page.
 - **2026-10-15** — P5-05: on relaunch the saved layout comes back with ended panels and a Restart button; nothing starts by itself (owner's decision).
 - **2026-10-15** — **P5 Multi-Terminal Workspace built** (P5-01 … P5-07). New channels `workspaces:list`, `terminals:rename`, `clipboard:writeText` / `clipboard:paste`, `projects:getLayout` / `projects:saveLayout`, `agents:sessions`; `app:getInfo` returns the platform. Done-when checks are left for the owner.
+- **2026-10-16** — **P6 Workspace & Git built** (P6-01 … P6-07). New channels `repositories:get`, `workspaces:create` / `workspaces:delete` / `workspaces:changes` / `workspaces:reveal` / `workspaces:openInEditor`; `app:getInfo` returns `fileManagerName`. Git commands Vcode runs never run repository hooks (owner decision). Done-when checks are left for the owner.
 - **2026-10-16** — **P5 done**: the owner ran the Done-when checks (4+ agents at once, layout back after a restart, stopping one leaves the others running).
 - **2026-10-15** — P6-01 adds the `repositories:get` channel (not in V1 doc §20's list): it re-detects the repository each call rather than only at project creation.

@@ -8,6 +8,7 @@ export function registerAppHandlers(): void {
     name: APP_NAME,
     version: app.getVersion(),
     platform: platform.name,
+    fileManagerName: platform.fileManagerName,
     versions: {
       electron: process.versions.electron,
       chrome: process.versions.chrome,
