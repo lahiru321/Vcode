@@ -2,6 +2,7 @@ import { arch, release, type } from 'node:os';
 import { join } from 'node:path';
 import { APP_ID, APP_NAME } from '@vcode/shared';
 import { app, BrowserWindow, dialog } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { configureAbout } from './about';
 import { pruneAudit, trackAgentRunEnds } from './audit/service';
 import { closeDatabase, getDatabase, initDatabase } from './db';
@@ -16,6 +17,7 @@ import { loadRenderer, registerRendererScheme, serveRenderer } from './renderer'
 import { applySecurityBaseline } from './security';
 import { trackTerminalSessions } from './terminals';
 import { createTray, showWindow, type AppTray } from './tray';
+import { startUpdater, type Updater } from './updater';
 import { loadWindowState, trackWindowState } from './window-state';
 
 const log = createLogger('app');
@@ -74,6 +76,7 @@ const WINDOW_SIZE = { width: 1280, height: 800, minWidth: 900, minHeight: 600 };
 
 let mainWindow: BrowserWindow | null = null;
 let tray: AppTray | null = null;
+let updater: Updater | null = null;
 
 function createMainWindow(): BrowserWindow {
   const state = loadWindowState(WINDOW_SIZE);
@@ -152,13 +155,31 @@ ${error instanceof Error ? error.message : String(error)}`,
   mainWindow = createMainWindow();
   startTray(mainWindow);
   startNotifications(() => mainWindow);
+  startAutoUpdate();
 });
+
+/**
+ * Packaged builds only: a dev build has nothing to update from (and no app-update.yml).
+ * `autoUpdater` is a lazy getter, so electron-updater does nothing until it is read here.
+ */
+function startAutoUpdate(): void {
+  if (!app.isPackaged) return;
+  try {
+    updater = startUpdater(autoUpdater, () => tray?.refresh());
+  } catch (err) {
+    log.error({ err }, 'could not start the updater');
+  }
+}
 
 function startTray(window: BrowserWindow): void {
   try {
     tray = createTray(
       () => mainWindow,
       () => app.quit(),
+      {
+        ready: () => updater?.state().ready ?? null,
+        restart: () => updater?.restartToUpdate(),
+      },
     );
     tray.watchWindow(window);
   } catch (err) {
@@ -207,6 +228,7 @@ app.on('second-instance', () => {
 });
 
 app.on('will-quit', () => {
+  updater?.stop();
   tray?.destroy();
   closeDatabase();
   log.info('quitting');

@@ -1,0 +1,73 @@
+# Release (P8-06): pushing a tag vX.Y.Z builds the Windows installer and uploads it, with the
+# auto-update files, to a *draft* GitHub release. Nothing reaches users until that release is
+# published by hand (docs/releasing.md).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the draft release and upload to it
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tag matches the app version
+        shell: bash
+        run: |
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match apps/desktop/package.json version $version"
+            exit 1
+          fi
+
+      - name: Format, lint, typecheck, unit tests
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+
+      # pnpm doesn't always run Electron's download script; it skips the download if it's there.
+      - name: Electron binary
+        run: node apps/desktop/node_modules/electron/install.js
+
+      - name: Build
+        run: pnpm build
+
+      - name: End-to-end smoke tests
+        run: pnpm e2e
+
+      - name: Package and upload to a draft release
+        working-directory: apps/desktop
+        run: pnpm exec electron-builder --win --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Keep the installer with the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vcode-Setup-${{ github.ref_name }}
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/latest.yml
+          retention-days: 30

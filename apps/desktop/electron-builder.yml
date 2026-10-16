@@ -50,5 +50,10 @@ nsis:
   # Projects, agents and API keys stay unless the user deletes %APPDATA%\Vcode.
   deleteAppDataOnUninstall: false
 
-# Publishing (GitHub Releases) comes with auto-update (P8-04).
-publish: null
+# Auto-update (P8-04) reads, and the release workflow (P8-06) uploads to, GitHub Releases.
+# Uploads make draft releases: users get an update only once its release is published.
+publish:
+  provider: github
+  owner: lahiru321
+  repo: Vcode
+  releaseType: draft

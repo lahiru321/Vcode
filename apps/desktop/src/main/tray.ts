@@ -78,6 +78,7 @@ export interface TrayActions {
   toggleWindow: () => void;
   newTerminal: () => void;
   about: () => void;
+  restartToUpdate: () => void;
   quit: () => void;
 }
 
@@ -86,6 +87,8 @@ export function trayMenuTemplate(
   running: RunningAgent[],
   windowVisible: boolean,
   actions: TrayActions,
+  /** A downloaded update waiting for a restart (P8-04). */
+  updateReady: string | null = null,
 ): MenuItemConstructorOptions[] {
   return [
     { label: runningSummary(running.length), enabled: false },
@@ -97,6 +100,9 @@ export function trayMenuTemplate(
     { label: windowVisible ? `Hide ${APP_NAME}` : `Show ${APP_NAME}`, click: actions.toggleWindow },
     { label: 'New Terminal…', click: actions.newTerminal },
     { type: 'separator' },
+    ...(updateReady
+      ? [{ label: `Restart to update to ${updateReady}`, click: actions.restartToUpdate }]
+      : []),
     { label: `About ${APP_NAME}`, click: actions.about },
     { label: `Quit ${APP_NAME}`, click: actions.quit },
   ];
@@ -123,7 +129,11 @@ export interface AppTray {
  * Creates the tray icon for `getWindow()`'s window. It updates itself when agents start, change
  * status or end, and when a watched window is shown or hidden.
  */
-export function createTray(getWindow: () => BrowserWindow | null, quit: () => void): AppTray {
+export function createTray(
+  getWindow: () => BrowserWindow | null,
+  quit: () => void,
+  update: { ready: () => string | null; restart: () => void },
+): AppTray {
   const source = nativeImage.createFromPath(APP_ICON_PATH);
   if (source.isEmpty()) {
     log.warn({ path: APP_ICON_PATH }, 'app icon missing; the tray icon will be blank');
@@ -146,6 +156,7 @@ export function createTray(getWindow: () => BrowserWindow | null, quit: () => vo
       broadcastEvent('app:command', { command: 'newTerminal' });
     },
     about: showAbout,
+    restartToUpdate: update.restart,
     quit,
   };
 
@@ -161,7 +172,9 @@ export function createTray(getWindow: () => BrowserWindow | null, quit: () => vo
     const visible = window !== null && window.isVisible() && !window.isMinimized();
     tray.setImage(running.length > 0 ? icons.running : icons.idle);
     tray.setToolTip(`${APP_NAME} — ${runningSummary(running.length)}`);
-    tray.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate(running, visible, actions)));
+    tray.setContextMenu(
+      Menu.buildFromTemplate(trayMenuTemplate(running, visible, actions, update.ready())),
+    );
   };
 
   tray.on('click', toggleWindow);

@@ -35,8 +35,8 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 **Next up:**
 1. P7 Done-when check by the owner: tray menu items, close to tray, the quit confirmation and a real notification click
-2. `P8-04` Auto-update with electron-updater + GitHub Releases
-3. `P8-06` Release workflow (P8-03 signing waits for the certificate decision; P8-05 for a crash-report service decision)
+2. Owner decisions: code-signing certificate (P8-03) and a crash-report service (P8-05) — see Open decisions
+3. First release: tag `v0.1.0` (docs/releasing.md), check the draft, then `P8-07` install test on a clean Windows machine
 
 ---
 
@@ -305,9 +305,11 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 - [x] **P8-02** · App icon, product name, version, About dialog · `S`
   - *2026-10-16:* App icon PNG done early (see P7-01); electron-builder turns `resources/icon.png` into the executable's and installer's icon (checked: `Vcode.exe` shows the V). `package.json`: `author` `lahiru321` (the executable's CompanyName said "GitHub, Inc." without it) and `homepage`; copyright `© 2026 lahiru321`; product name Vcode, version from `package.json` (0.1.0). New `APP_REPO_URL`. **About**: Electron's native About panel (`src/main/about.ts`: name, version, Electron / Node, copyright, the repository, the icon), opened from the tray ("About Vcode") and from a new footer in the Settings dialog ("Vcode 0.1.0" + About Vcode), through the new channel **`app:showAbout`**. Checked in the built app: footer shows the version, the button opens the panel; packaged `Vcode.exe` metadata: ProductName Vcode, CompanyName lahiru321.
 - [ ] **P8-03** · Authenticode code signing (needs the certificate decision below) · `S`
-- [ ] **P8-04** · Auto-update with electron-updater + GitHub Releases · `M`
+- [x] **P8-04** · Auto-update with electron-updater + GitHub Releases · `M`
+  - *2026-10-16:* `electron-updater` (runtime dependency) + `publish: github lahiru321/Vcode, releaseType: draft` in `electron-builder.yml` (→ `app-update.yml` in the app, `latest.yml` + `.blockmap` next to the installer). `src/main/updater.ts`, packaged builds only: first check 30 s after start-up, then every 6 h; downloads in the background and installs when the app quits (V1 doc §11 "installs them on the next restart"). When one is downloaded: an `app:notice` ("Vcode 0.2.0 is ready and installs when you restart Vcode.") and a tray item **Restart to update to 0.2.0** (`quitAndInstall`, through the usual quit confirmation). Failed checks (offline, no release) are one warning in the log, nothing on screen. Only *published* releases are seen, so a draft from the release workflow reaches nobody until it is published. `pnpm dist` passes `--publish never`. Checked on the packaged app: it asked GitHub after 30 s and logged "No published versions on GitHub" (there are none yet), kept running. The download → restart → install path needs two real releases (P8-07).
 - [ ] **P8-05** · Opt-in crash reporting · `S`
-- [ ] **P8-06** · Release workflow: pushing a version tag builds and publishes the installer · `M`
+- [x] **P8-06** · Release workflow: pushing a version tag builds and publishes the installer · `M`
+  - *2026-10-16:* `.github/workflows/release.yml`, on a `v*` tag (Windows): the tag must equal `apps/desktop/package.json`'s version → format, lint, typecheck, unit tests → Electron binary → build → e2e → `electron-builder --publish always` with the workflow's `GITHUB_TOKEN` (`contents: write`) into a **draft** release; the installer and `latest.yml` also kept as a run artifact for 30 days. Steps for the owner in **`docs/releasing.md`** (bump, tag, check the draft, publish; unsigned → SmartScreen "Run anyway" until P8-03). Not run yet: needs the first tag.
 - [ ] **P8-07** · Install test on a clean Windows machine / VM · `S`
 
 **Done when:**
@@ -349,6 +351,7 @@ From the Vibe Coding Plan (§20 roadmap):
 | Code-signing certificate (Authenticode; Apple Developer ID later) | P8-03 | Open |
 | GitHub repo location + public / private | P1-16 | Decided 2026-10-03: **github.com/lahiru321/Vcode**, public |
 | License | P8 | Open |
+| Crash reports: where they go (e.g. Sentry, or a self-hosted minidump server) | P8-05 | Open |
 | App ID (Windows AppUserModelID, installer appId) | P7-03 | Set 2026-10-16: `com.lahiru321.vcode`; change before the first release if wanted |
 | Git hooks for git commands Vcode runs | P6-04 | Decided 2026-10-16: **off** (`core.hooksPath` to a path that can't exist) |
 

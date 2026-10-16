@@ -8,6 +8,7 @@ const actions: TrayActions = {
   toggleWindow: vi.fn(),
   newTerminal: vi.fn(),
   about: vi.fn(),
+  restartToUpdate: vi.fn(),
   quit: vi.fn(),
 };
 
@@ -57,6 +58,15 @@ describe('trayMenuTemplate', () => {
       'About Vcode',
       'Quit Vcode',
     ]);
+  });
+});
+
+describe('trayMenuTemplate with an update ready', () => {
+  it('offers a restart to install it', () => {
+    const menu = trayMenuTemplate([], true, actions, '0.2.0');
+    const item = menu.find((entry) => entry.label === 'Restart to update to 0.2.0');
+    expect(item?.click).toBe(actions.restartToUpdate);
+    expect(menu.indexOf(item!)).toBe(menu.findIndex((entry) => entry.label === 'About Vcode') - 1);
   });
 });
 
