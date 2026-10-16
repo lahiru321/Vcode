@@ -9,6 +9,7 @@ export default defineConfig({
       'apps/desktop/src/main/**/*.test.ts',
       'apps/desktop/src/pty-host/**/*.test.ts',
       'apps/desktop/src/renderer/**/*.test.ts',
+      'apps/desktop/build/**/*.test.ts',
       'packages/*/src/**/*.test.ts',
     ],
     environment: 'node',
