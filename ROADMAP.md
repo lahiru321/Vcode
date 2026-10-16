@@ -31,11 +31,12 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P6 — Workspace & Git (built; waiting for the owner's Done-when check)
+**Current phase:** P7 — Desktop Polish & Hardening
 
 **Next up:**
-1. P6 Done-when check by the owner: agents in their own worktrees on their own branches, deleting one removes its worktree
-2. `P7-01` System tray with running-agent count
+1. `P7-02` Close window → hide to tray (setting); quit with running agents → confirmation listing them
+2. `P7-03` Native notifications when an agent finishes or seems to be waiting for input
+3. `P7-04` Single-instance lock
 
 ---
 
@@ -48,8 +49,8 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
 | P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | Done |
-| P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | Built; owner check |
-| P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | To do |
+| P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | Done |
+| P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | In progress |
 | P8 | Distribution | Signed Windows installer with auto-update | M | To do |
 | — | macOS Release | Same app on macOS | M | After V1 |
 | — | V2+ | Orchestration, verification, project memory | — | Later |
@@ -269,7 +270,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
 **Goal:** feels like a real desktop app and passes the security checklist.
 **Depends on:** P5.
 
-- [ ] **P7-01** · System tray with running-agent count (Show / Hide, New Terminal, Quit) · `S`
+- [x] **P7-01** · System tray with running-agent count (Show / Hide, New Terminal, Quit) · `S`
+  - *2026-10-16:* `src/main/tray.ts`. No app icon exists yet (P8-02), so the tray icon is drawn in code: a 16 px blue rounded square with a white ">_" (plus a 2× copy), and a green dot in the corner while any agent runs. Tooltip "Vcode — N agents running". Menu: the count, then one disabled line per running agent ("Claude Code · shop (working)", new `listRunningAgents` query with agent + project names), Show / Hide Vcode (follows the window's show / hide / minimize / restore), New Terminal…, Quit Vcode. It refreshes on every `agent:status` change. Left click toggles the window. New Terminal… shows the window and sends the new event **`app:command { command: 'newTerminal' }`**; the renderer runs the New terminal dialog shortcut's handler (`runShortcut`), or says to select an active project. If the tray can't be created the app carries on (logged). Checked in the built app: no tray errors in the log; `app:command` with no project → the toast, with a project → the New terminal dialog; the icon rendered at 8× matches the design. The tray menu itself is native and can't be driven by Playwright; the owner should click through it.
 - [ ] **P7-02** · Close window → hide to tray (setting); quit with running agents → confirmation listing them · `S`
 - [ ] **P7-03** · Native notifications when an agent finishes or seems to be waiting for input · `S`
 - [ ] **P7-04** · Single-instance lock (second launch focuses the existing window) · `S`
@@ -383,6 +385,7 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-15** — P5-04 adds `clipboard:writeText` and `clipboard:paste` rather than allowing clipboard permissions for the page.
 - **2026-10-15** — P5-05: on relaunch the saved layout comes back with ended panels and a Restart button; nothing starts by itself (owner's decision).
 - **2026-10-15** — **P5 Multi-Terminal Workspace built** (P5-01 … P5-07). New channels `workspaces:list`, `terminals:rename`, `clipboard:writeText` / `clipboard:paste`, `projects:getLayout` / `projects:saveLayout`, `agents:sessions`; `app:getInfo` returns the platform. Done-when checks are left for the owner.
+- **2026-10-16** — **P6 done**: the owner ran the Done-when checks.
 - **2026-10-16** — **P6 Workspace & Git built** (P6-01 … P6-07). New channels `repositories:get`, `workspaces:create` / `workspaces:delete` / `workspaces:changes` / `workspaces:reveal` / `workspaces:openInEditor`; `app:getInfo` returns `fileManagerName`. Git commands Vcode runs never run repository hooks (owner decision). Done-when checks are left for the owner.
 - **2026-10-16** — **P5 done**: the owner ran the Done-when checks (4+ agents at once, layout back after a restart, stopping one leaves the others running).
 - **2026-10-15** — P6-01 adds the `repositories:get` channel (not in V1 doc §20's list): it re-detects the repository each call rather than only at project creation.

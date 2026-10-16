@@ -6,7 +6,12 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppDatabase } from '../db';
 import { createProject, deleteProject } from '../projects/service';
 import { ensureMainWorkspace } from '../workspaces/service';
-import { createAgentSession, listActiveAgentSessions, setAgentSessionStatus } from './sessions';
+import {
+  createAgentSession,
+  listActiveAgentSessions,
+  listRunningAgents,
+  setAgentSessionStatus,
+} from './sessions';
 import { tempDir, testDatabase } from '../testing';
 import {
   createAgent,
@@ -411,5 +416,21 @@ describe('listActiveAgentSessions', () => {
         { sessionId: second.id, agentId: agent.id, projectId: b.id, status: 'working' },
       ]),
     );
+  });
+});
+
+describe('listRunningAgents', () => {
+  it('names the agent and project of each run still going', async () => {
+    const db = testDatabase();
+    const shop = await project(db, 'shop');
+    const claude = createAgent(db, { name: 'Claude Code', adapter: 'claude' });
+    const run = createAgentSession(db, claude.id, ensureMainWorkspace(db, shop).id);
+    setAgentSessionStatus(db, run.id, 'waiting');
+    const ended = createAgentSession(db, claude.id, ensureMainWorkspace(db, shop).id);
+    setAgentSessionStatus(db, ended.id, 'completed');
+
+    expect(listRunningAgents(db)).toEqual([
+      { sessionId: run.id, agentName: 'Claude Code', projectName: 'shop', status: 'waiting' },
+    ]);
   });
 });

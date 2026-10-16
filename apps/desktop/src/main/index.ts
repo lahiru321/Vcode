@@ -9,6 +9,7 @@ import { ptyHost } from './pty-host';
 import { loadRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
 import { trackTerminalSessions } from './terminals';
+import { createTray, type AppTray } from './tray';
 import { loadWindowState, trackWindowState } from './window-state';
 
 const log = createLogger('app');
@@ -48,6 +49,9 @@ function startLogging(): void {
 
 const WINDOW_SIZE = { width: 1280, height: 800, minWidth: 900, minHeight: 600 };
 
+let mainWindow: BrowserWindow | null = null;
+let tray: AppTray | null = null;
+
 function createMainWindow(): BrowserWindow {
   const state = loadWindowState(WINDOW_SIZE);
   const window = new BrowserWindow({
@@ -76,6 +80,9 @@ function createMainWindow(): BrowserWindow {
     window.show();
   });
   trackWindowState(window);
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null;
+  });
 
   // Renderer warnings and errors (e.g. CSP violations) go to the log, and the dev terminal.
   const rendererLog = createLogger('renderer');
@@ -110,8 +117,22 @@ ${error instanceof Error ? error.message : String(error)}`,
 
   registerIpcHandlers();
   startPtyHost();
-  createMainWindow();
+  mainWindow = createMainWindow();
+  startTray(mainWindow);
 });
+
+function startTray(window: BrowserWindow): void {
+  try {
+    tray = createTray(
+      () => mainWindow,
+      () => app.quit(),
+    );
+    tray.watchWindow(window);
+  } catch (err) {
+    // The app works without a tray icon (e.g. a Linux desktop without a status area).
+    log.error({ err }, 'could not create the tray icon');
+  }
+}
 
 function startPtyHost(): void {
   ptyHost.on('failed', () =>
@@ -134,6 +155,7 @@ app.on('before-quit', (event) => {
 });
 
 app.on('will-quit', () => {
+  tray?.destroy();
   closeDatabase();
   log.info('quitting');
   closeLogging();

@@ -8,7 +8,7 @@ import {
 } from '@vcode/shared';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { AppDatabase } from '../db';
-import { agents, agentSessions, workspaces } from '../db/schema';
+import { agents, agentSessions, projects, workspaces } from '../db/schema';
 import { createLogger } from '../logging';
 
 // Agent sessions (V1 doc §13, §18 "agent_sessions"): one run of an agent, always in a terminal
@@ -191,6 +191,31 @@ export function listActiveAgentSessions(db: AppDatabase): {
     })
     .from(agentSessions)
     .innerJoin(workspaces, eq(agentSessions.workspaceId, workspaces.id))
+    .where(inArray(agentSessions.status, ACTIVE))
+    .orderBy(agentSessions.startedAt)
+    .all();
+}
+
+export interface RunningAgent {
+  sessionId: string;
+  agentName: string;
+  projectName: string;
+  status: AgentSessionStatus;
+}
+
+/** Agent sessions still going, with agent and project names for menus and dialogs, oldest first. */
+export function listRunningAgents(db: AppDatabase): RunningAgent[] {
+  return db
+    .select({
+      sessionId: agentSessions.id,
+      agentName: agents.name,
+      projectName: projects.name,
+      status: agentSessions.status,
+    })
+    .from(agentSessions)
+    .innerJoin(agents, eq(agentSessions.agentId, agents.id))
+    .innerJoin(workspaces, eq(agentSessions.workspaceId, workspaces.id))
+    .innerJoin(projects, eq(workspaces.projectId, projects.id))
     .where(inArray(agentSessions.status, ACTIVE))
     .orderBy(agentSessions.startedAt)
     .all();

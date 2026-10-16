@@ -97,6 +97,13 @@ export function useShortcut(id: ShortcutId, handler: () => void, enabled = true)
   }, [id, enabled]);
 }
 
+/** Runs what the shortcut would do (e.g. for a tray menu item); false if nothing handles it now. */
+export function runShortcut(id: ShortcutId): boolean {
+  const handler = handlers.get(id)?.at(-1);
+  handler?.();
+  return handler !== undefined;
+}
+
 /** While a dialog or menu is open, keys belong to it. */
 function inOverlay(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('[role=dialog], [role=menu]') !== null;

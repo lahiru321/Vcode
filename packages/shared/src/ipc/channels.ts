@@ -44,7 +44,7 @@ export const INVOKE_CHANNELS = [
 ] as const;
 
 /** Push channels (main → renderer, `webContents.send`). */
-export const EVENT_CHANNELS = ['app:notice', 'agent:status'] as const;
+export const EVENT_CHANNELS = ['app:notice', 'app:command', 'agent:status'] as const;
 
 /**
  * Main → renderer, carrying a terminal's MessagePort (`webContents.postMessage` with a transfer

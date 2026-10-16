@@ -43,6 +43,13 @@ export const AppNotice = z.object({
 });
 export type AppNotice = z.infer<typeof AppNotice>;
 
+/** Something chosen outside the page (e.g. the tray menu) for the renderer to do. */
+export const AppCommand = z.object({
+  /** `newTerminal`: the New terminal dialog for the project on screen. */
+  command: z.enum(['newTerminal']),
+});
+export type AppCommand = z.infer<typeof AppCommand>;
+
 // Projects (V1 doc §20). Deleting a project removes its records, never files on disk.
 
 const ProjectName = z.string().trim().min(1, 'Name is required').max(100, 'Name is too long');
@@ -528,6 +535,7 @@ export const invokeContracts = {
 
 export const eventContracts = {
   'app:notice': AppNotice,
+  'app:command': AppCommand,
   'agent:status': AgentStatusEvent,
 } satisfies Record<EventChannel, z.ZodType>;
 
