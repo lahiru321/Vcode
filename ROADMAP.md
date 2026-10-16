@@ -31,12 +31,11 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 
 ## Now
 
-**Current phase:** P6 — Workspace & Git (P5 waiting for the owner's Done-when check)
+**Current phase:** P6 — Workspace & Git
 
 **Next up:**
-1. P5 Done-when check by the owner: 4+ agents at once in one project, the layout back after an app restart, stopping one leaves the others running
-2. `P6-06` Branch name + uncommitted-changes indicator per workspace
-3. `P6-07` Reveal in Explorer / Open in VS Code
+1. `P6-07` Reveal in Explorer / Open in VS Code
+2. P6 Done-when check by the owner: agents in their own worktrees on their own branches, deleting one removes its worktree
 
 ---
 
@@ -48,7 +47,7 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 | P2 | Terminal Engine | A real PowerShell terminal that survives a UI reload | L | Done |
 | P3 | First CLI Agent | Claude Code running end-to-end inside the app | M | Done |
 | P4 | Agent Registry | Gemini, Codex and custom CLIs, plus encrypted API keys | M | Done |
-| P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | Built; owner check |
+| P5 | Multi-Terminal Workspace | Many agents side by side in a saved grid layout | M | Done |
 | P6 | Workspace & Git | Each agent in its own folder / Git worktree | L | In progress |
 | P7 | Desktop Polish & Hardening | Tray, notifications, audit log, security review | M | To do |
 | P8 | Distribution | Signed Windows installer with auto-update | M | To do |
@@ -253,7 +252,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-16:* `src/main/git/cli.ts` runs `git` (found on PATH, `GIT_*` variables dropped, `GIT_TERMINAL_PROMPT=0`) with **hooks always off**: `-c core.hooksPath=<app executable>/no-hooks`, a path under a file, so no hooks folder can ever exist there. `core.fsmonitor=false` too. This keeps the P1-11 rule that nothing a repository supplies is run (owner decision 2026-10-16). Without git → `UNAVAILABLE` "Git was not found…"; folder workspaces still work. `src/main/git/worktrees.ts`: `addWorktree` (branch checked with `check-ref-format --branch`; an existing branch is checked out as it is, a new one made with `-b` from `startPoint` or the main folder's HEAD), `uncommittedChanges` (`status --porcelain`, untracked included), `removeWorktree`, `pruneWorktrees`, `excludeFolder` (adds `/workspaces/` to the repository's local `info/exclude`, so worktrees don't show as untracked in the main folder). `workspaces:create` takes `kind: 'worktree'` + `branch` (+ optional `startPoint`) → `workspaces/<slug>`; refused for a plain-folder project, a folder that already exists, or whatever git refuses (e.g. a branch checked out elsewhere), with git's message. `workspaces:list` reads each worktree's checked-out branch again. **`workspaces:delete { id, force? }`**: a worktree goes with `git worktree remove` (folder gone, branch kept); with uncommitted changes `CONFLICT` unless `force`; a folder that's gone is pruned; one that no longer passes the path guards is left alone and only the record goes. Response now has `removedFolder`. New **`workspaces:changes { id }`** → `{ count, files }` (first 20). Dialogs: Folder → "Git worktree on its own branch" (disabled for a plain-folder project), Branch (follows the name until edited) and Start from; Delete shows what happens to the folder and branch, and for a dirty worktree lists the changes and offers "Delete anyway". Tests against a real repository, including a `post-checkout` hook that runs under plain `git worktree add` but not through Vcode. Checked in the built app: created "Claude Backend" on `claude/backend` from the dialog (hook didn't run, main folder still clean); refused `main` (checked out in the main folder) and `a..b`; a shell opened in the worktree; delete with an edited README → listed `M README.md`, "Delete anyway" removed the folder and kept the branch; plain-folder project → worktree option disabled.
 - [x] **P6-05** · Path guards: every workspace must resolve inside the project root (no symlink escapes) · `S`
   - *2026-10-15:* `src/main/fs/folders.ts`: `isInsideFolder(root, path)` (by `path.relative`, so `shop-2` isn't inside `shop` and a `..name` folder is), **`resolveWorkspaceFolder(projectRoot, input)`** for an existing folder (relative = from the root; the root and the folder are both `realpath`ed, so a junction / symlink anywhere on the way is followed before the check; the root itself is allowed — that's `main`) and **`planWorkspaceFolder(projectRoot, input)`** for a folder about to be created (its deepest existing ancestor is `realpath`ed and the rest appended; must be strictly inside the root). Both refuse with `INVALID_REQUEST` "Workspaces must be inside the project folder: …". Done ahead of P6-02 so the create paths use them from the start. Terminals now check their workspace with `resolveWorkspaceFolder` on **every** start and restart (not only at creation), so a workspace folder later swapped for a link out of the project can't be started in. Tests: inside / outside / `..` / sibling-prefix cases, a junction pointing out (refused) and in (resolved to its target), a root reached through a link, a missing root, a planned folder under a junction pointing out, and a terminal refusing a swapped workspace folder before anything is spawned.
-- [ ] **P6-06** · Branch name + uncommitted-changes indicator per workspace in the sidebar · `M`
+- [x] **P6-06** · Branch name + uncommitted-changes indicator per workspace in the sidebar · `M`
+  - *2026-10-16:* `workspaces:list` keeps every branch current: `main` and folder workspaces show what the project folder has checked out (same working tree; read from `.git`, no process), worktrees what they have. `workspaces:changes` now covers every kind and returns `null` when there's nothing to check: `main` → `git status` of the whole project folder; a folder workspace → only the changes inside its folder (`-- :(literal)<folder>`); a worktree → its own, and only if its `.git` file is still there (otherwise git would report the project's changes from inside it). The delete check uses the same. Renderer: `useWorkspaceChanges` asks for every ready workspace when the list loads and every 15 s while the window is visible (agents change files while it stays focused); the sidebar row shows an amber dot + count after the branch, and "N uncommitted changes" in its tooltip. Checked in the built app: clean repo → no dots; edits in `backend/` and two new files in a worktree, window left focused → `main 1`, `Backend 1`, `Agent 2` within 15 s; `git switch -c next` in the project folder → main and Backend show `next` on the next focus, the worktree keeps `claude/agent`.
 - [ ] **P6-07** · Reveal in Explorer / Open in VS Code · `S`
 
 **Done when:**
@@ -382,4 +382,5 @@ Maps each criterion in V1 doc §24 to the tasks that deliver it.
 - **2026-10-15** — P5-04 adds `clipboard:writeText` and `clipboard:paste` rather than allowing clipboard permissions for the page.
 - **2026-10-15** — P5-05: on relaunch the saved layout comes back with ended panels and a Restart button; nothing starts by itself (owner's decision).
 - **2026-10-15** — **P5 Multi-Terminal Workspace built** (P5-01 … P5-07). New channels `workspaces:list`, `terminals:rename`, `clipboard:writeText` / `clipboard:paste`, `projects:getLayout` / `projects:saveLayout`, `agents:sessions`; `app:getInfo` returns the platform. Done-when checks are left for the owner.
+- **2026-10-16** — **P5 done**: the owner ran the Done-when checks (4+ agents at once, layout back after a restart, stopping one leaves the others running).
 - **2026-10-15** — P6-01 adds the `repositories:get` channel (not in V1 doc §20's list): it re-detects the repository each call rather than only at project creation.
