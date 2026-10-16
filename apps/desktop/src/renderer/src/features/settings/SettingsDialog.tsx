@@ -1,4 +1,4 @@
-import { APP_NAME, type Settings } from '@vcode/shared';
+import { APP_NAME, MAX_TERMINALS, type Settings } from '@vcode/shared';
 import { useEffect, useId, useState } from 'react';
 import {
   Dialog,
@@ -7,6 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@renderer/components/ui/dialog';
+import { Input } from '@renderer/components/ui/input';
+import { Label } from '@renderer/components/ui/label';
 import { errorMessage, FormError } from '@renderer/lib/form';
 import { invoke } from '@renderer/lib/ipc';
 
@@ -91,7 +93,58 @@ function SettingsForm() {
           </span>
         </span>
       </label>
+      <MaxTerminalsField
+        id={`${ids}-max`}
+        value={settings.maxTerminals}
+        onChange={(maxTerminals) => change({ maxTerminals })}
+      />
       <FormError message={error} />
+    </div>
+  );
+}
+
+/** Saved when a whole number in range is typed (on blur, or Enter); anything else snaps back. */
+function MaxTerminalsField({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+  const commit = () => {
+    const next = Number(text);
+    if (Number.isInteger(next) && next >= MAX_TERMINALS.min && next <= MAX_TERMINALS.max) {
+      if (next !== value) onChange(next);
+    } else {
+      setText(String(value));
+    }
+  };
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-center gap-3">
+        <Input
+          id={id}
+          type="number"
+          inputMode="numeric"
+          min={MAX_TERMINALS.min}
+          max={MAX_TERMINALS.max}
+          value={text}
+          className="h-8 w-20"
+          onChange={(event) => setText(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit();
+          }}
+        />
+        <Label htmlFor={id}>Most terminals running at once</Label>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Shells and agents together, across all projects ({MAX_TERMINALS.min}–{MAX_TERMINALS.max}).
+        Each one is a running process.
+      </p>
     </div>
   );
 }

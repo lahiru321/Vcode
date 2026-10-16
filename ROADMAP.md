@@ -34,9 +34,9 @@ A desktop app (Windows first, macOS later) for running and managing many AI codi
 **Current phase:** P7 — Desktop Polish & Hardening
 
 **Next up:**
-1. `P7-07` Setting for the maximum number of concurrent terminals
-2. `P7-05` Audit log service + simple viewer
-3. `P7-06` Security checklist review (V1 doc §21) + Electron fuses
+1. `P7-05` Audit log service + simple viewer
+2. `P7-06` Security checklist review (V1 doc §21) + Electron fuses
+3. `P7-08` End-to-end smoke tests with Playwright for Electron
 
 ---
 
@@ -281,7 +281,8 @@ These keep the macOS port cheap. Spec reference: V1 doc §6 *Cross-Platform Read
   - *2026-10-16:* `app.requestSingleInstanceLock()` first thing in `src/main/index.ts`: a second launch calls `app.exit(0)` before it starts logging, the database or a window; the running one gets `second-instance` and shows / restores / focuses its window (also when hidden to the tray). The lock is per user-data folder, so tests and a dev build with their own `--user-data-dir` still run alongside. Checked in the built app: window hidden to the tray, same app launched again → the second process exited (code 0) in ~0.3 s, the first window was shown again, still one window, one "Vcode starting" line in the log; a launch with another user-data folder kept running.
 - [ ] **P7-05** · Audit log service + simple viewer (terminal start/stop, agent changes, credential changes, workspace operations) · `M`
 - [ ] **P7-06** · Security checklist review (V1 doc §21) + Electron fuses · `S`
-- [ ] **P7-07** · Setting for the maximum number of concurrent terminals · `S`
+- [x] **P7-07** · Setting for the maximum number of concurrent terminals · `S`
+  - *2026-10-16:* New setting **`maxTerminals`** (default 16, 1–64, `MAX_TERMINALS` in shared): shells and agents together, across all projects. `createTerminal` counts sessions that are `starting` / `running` and refuses with `CONFLICT` "2 terminals are already running, the most allowed. Stop one, or raise the limit in Settings." — once before anything is resolved or spawned, and again inside the insert transaction so terminals started at the same moment can't pass together. A restart at the limit works (the old one stops first). Settings dialog: a number field, saved on Enter / blur; anything out of range snaps back. Checked in the built app: default 16; 0 snapped back; 2 saved; the third Ctrl+Shift+T showed the message as a toast, two terminals running.
 - [ ] **P7-08** · End-to-end smoke tests with Playwright for Electron · `M`
 
 **Done when:**

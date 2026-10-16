@@ -20,6 +20,7 @@ import { resolveWorkspaceFolder } from '../fs/folders';
 import { createLogger } from '../logging';
 import type { Command, Environment } from '../platform';
 import { getProject, type ProjectRow } from '../projects/service';
+import { getSettings } from '../settings/store';
 import {
   PtyHostError,
   type PtyHostSupervisor,
@@ -62,6 +63,27 @@ function shellTitle(shell: string): string {
   return basename(shell, extname(shell));
 }
 
+type Queryable = Pick<AppDatabase, 'select'>;
+
+/**
+ * CONFLICT when as many terminals as the `maxTerminals` setting allows are already starting or
+ * running, in any project (P7-07).
+ */
+function assertTerminalAllowed(db: Queryable, limit: number): void {
+  const running = db
+    .select({ id: terminalSessions.id })
+    .from(terminalSessions)
+    .where(inArray(terminalSessions.status, ACTIVE))
+    .all().length;
+  if (running >= limit) {
+    const count = running === 1 ? '1 terminal is' : `${running} terminals are`;
+    throw new IpcError(
+      'CONFLICT',
+      `${count} already running, the most allowed. Stop one, or raise the limit in Settings.`,
+    );
+  }
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -75,6 +97,8 @@ export async function createTerminal(
   if (project.status === 'archived') {
     throw new IpcError('CONFLICT', 'Restore the project to open terminals in it.');
   }
+  const limit = getSettings(db).maxTerminals;
+  assertTerminalAllowed(db, limit);
   const workspace = request.workspaceId
     ? getWorkspace(db, request.workspaceId, project.id)
     : ensureMainWorkspace(db, project);
@@ -89,6 +113,8 @@ export async function createTerminal(
   const { shell, command, env, agent } = launch;
 
   const row = db.transaction((tx) => {
+    // Again with the insert, so terminals started at the same moment can't pass it together.
+    assertTerminalAllowed(tx, limit);
     const agentSession = agent ? createAgentSession(tx, agent.id, workspace.id) : null;
     return tx
       .insert(terminalSessions)

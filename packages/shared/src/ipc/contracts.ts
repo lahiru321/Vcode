@@ -428,6 +428,9 @@ export const TerminalIdRequest = z.strictObject({ terminalId: Id });
 
 export const RenameTerminalRequest = z.strictObject({ terminalId: Id, title: TerminalTitle });
 
+/** Bounds of the `maxTerminals` setting. */
+export const MAX_TERMINALS = { min: 1, max: 64 } as const;
+
 // Settings the renderer may read and change (V1 doc §20). Each key is one `app_settings` row;
 // main falls back to the default when a row is missing or no longer matches its schema.
 // Main-only state (e.g. window bounds) lives in the same table but is never exposed here.
@@ -439,6 +442,8 @@ export const Settings = z.object({
   closeToTray: z.boolean(),
   /** Notify when an agent finishes, fails, or waits for input while the app is in the background (P7-03). */
   notifications: z.boolean(),
+  /** Terminals (shells and agents) running at once, across all projects (P7-07). */
+  maxTerminals: z.number().int().min(MAX_TERMINALS.min).max(MAX_TERMINALS.max),
 });
 export type Settings = z.infer<typeof Settings>;
 export type SettingKey = keyof Settings;
@@ -447,6 +452,7 @@ export const SETTING_DEFAULTS: Settings = {
   selectedProjectId: null,
   closeToTray: true,
   notifications: true,
+  maxTerminals: 16,
 };
 
 /** Only the given keys are changed. */

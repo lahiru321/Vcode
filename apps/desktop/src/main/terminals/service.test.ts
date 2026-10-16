@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { terminalSessions, workspaces } from '../db/schema';
 import { createProject, updateProject } from '../projects/service';
 import { PtyHostError } from '../pty-host/supervisor';
+import { updateSettings } from '../settings/store';
 import { fakeSecretBox, tempDir, testDatabase } from '../testing';
 import {
   attachTerminal,
@@ -239,6 +240,34 @@ describe('createTerminal', () => {
     ).rejects.toMatchObject({
       code: 'UNAVAILABLE',
     });
+  });
+
+  it('refuses a terminal over the maxTerminals setting, across projects (P7-07)', async () => {
+    const { db, deps, request } = setup();
+    cleanupDb = db;
+    updateSettings(db, { maxTerminals: 2 });
+    const a = await project(db, 'a');
+    const b = await project(db, 'b');
+    const first = await createTerminal(deps, { projectId: a.id, cols: 80, rows: 24 });
+    await createTerminal(deps, { projectId: b.id, cols: 80, rows: 24 });
+
+    await expect(
+      createTerminal(deps, { projectId: a.id, cols: 80, rows: 24 }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message:
+        '2 terminals are already running, the most allowed. Stop one, or raise the limit in Settings.',
+    });
+    expect(request).toHaveBeenCalledTimes(2); // nothing spawned for the refused one
+
+    // A restart at the limit is fine: the old one stops first.
+    const restarted = await restartTerminal(deps, first.id);
+    expect(restarted.status).toBe('running');
+    // One that ended frees its place.
+    recordTerminalExit(db, { sessionId: restarted.id, exitCode: 0, signal: null });
+    await expect(
+      createTerminal(deps, { projectId: a.id, cols: 80, rows: 24 }),
+    ).resolves.toMatchObject({ status: 'running' });
   });
 });
 
