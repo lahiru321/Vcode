@@ -57,6 +57,18 @@ jobs:
       - name: End-to-end smoke tests
         run: pnpm e2e
 
+      # Made here first: with no release yet, electron-builder's parallel uploads can each create
+      # one (v0.1.0 got two drafts, the files split between them). It uploads to this one.
+      - name: Create the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id")
+          if [ -z "$existing" ]; then
+            gh release create "$GITHUB_REF_NAME" --draft --title "${GITHUB_REF_NAME#v}" --notes ""
+          fi
+
       - name: Package and upload to a draft release
         working-directory: apps/desktop
         run: pnpm exec electron-builder --win --x64 --publish always
