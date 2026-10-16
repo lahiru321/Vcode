@@ -1,4 +1,4 @@
-import type { CreateWorkspaceRequest, Workspace } from '@vcode/shared';
+import type { Workspace } from '@vcode/shared';
 import {
   createContext,
   useCallback,
@@ -13,7 +13,11 @@ import { toast } from 'sonner';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 import { errorMessage } from '@renderer/lib/form';
 import { invoke } from '@renderer/lib/ipc';
-import { CreateWorkspaceDialog, DeleteWorkspaceDialog } from './WorkspaceDialogs';
+import {
+  CreateWorkspaceDialog,
+  DeleteWorkspaceDialog,
+  type NewWorkspace,
+} from './WorkspaceDialogs';
 
 // The workspace manager (P6-02, V1 doc §17): the selected project's workspaces in the sidebar,
 // with create, delete, and opening a terminal in one.
@@ -92,7 +96,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   }, [reload]);
 
   const create = useCallback(
-    async (request: Omit<CreateWorkspaceRequest, 'projectId'>) => {
+    async (request: NewWorkspace) => {
       if (!projectId) return;
       const workspace = await invoke('workspaces:create', { projectId, ...request });
       await reload();
@@ -103,12 +107,19 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   );
 
   const remove = useCallback(
-    async (workspace: Workspace) => {
-      await invoke('workspaces:delete', { id: workspace.id });
+    async (workspace: Workspace, force: boolean) => {
+      const { removedFolder } = await invoke('workspaces:delete', {
+        id: workspace.id,
+        ...(force ? { force } : {}),
+      });
       await reload();
       setDialog(null);
       toast.success(`Deleted workspace “${workspace.name}”`, {
-        description: 'Its folder is still on disk.',
+        description: !removedFolder
+          ? 'Its folder is still on disk.'
+          : workspace.branch
+            ? `Worktree folder removed; the branch “${workspace.branch}” is kept.`
+            : 'Worktree folder removed.',
       });
     },
     [reload],

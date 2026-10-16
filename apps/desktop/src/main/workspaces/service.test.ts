@@ -202,7 +202,10 @@ describe('deleteWorkspace', () => {
       })
       .run();
 
-    expect(deleteWorkspace(db, workspace.id)).toEqual({ id: workspace.id });
+    expect(await deleteWorkspace(db, workspace.id)).toEqual({
+      id: workspace.id,
+      removedFolder: false,
+    });
     expect((await listWorkspaces(db, project.id)).map((w) => w.name)).toEqual(['main']);
     expect(db.select().from(terminalSessions).all()).toEqual([]);
     expect(existsSync(workspace.path)).toBe(true);
@@ -228,14 +231,11 @@ describe('deleteWorkspace', () => {
       })
       .run();
 
-    expect(() => deleteWorkspace(db, main!.id)).toThrow(
-      expect.objectContaining({ code: 'CONFLICT' }),
-    );
-    expect(() => deleteWorkspace(db, workspace.id)).toThrow(
-      expect.objectContaining({ code: 'CONFLICT', message: expect.stringContaining('running') }),
-    );
-    expect(() => deleteWorkspace(db, MISSING_ID)).toThrow(
-      expect.objectContaining({ code: 'NOT_FOUND' }),
-    );
+    await expect(deleteWorkspace(db, main!.id)).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(deleteWorkspace(db, workspace.id)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: expect.stringContaining('running'),
+    });
+    await expect(deleteWorkspace(db, MISSING_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

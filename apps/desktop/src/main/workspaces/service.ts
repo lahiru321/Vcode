@@ -4,18 +4,28 @@ import {
   IpcError,
   slugify,
   type CreateWorkspaceRequest,
+  type WorkspaceChanges,
   type WorkspaceStatus,
 } from '@vcode/shared';
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { AppDatabase } from '../db';
 import { repositories, terminalSessions, workspaces } from '../db/schema';
 import { planWorkspaceFolder, resolveWorkspaceFolder } from '../fs/folders';
+import { detectGitRepository } from '../git/detect';
+import {
+  addWorktree,
+  excludeFolder,
+  pruneWorktrees,
+  removeWorktree,
+  uncommittedChanges,
+} from '../git/worktrees';
 import { getProject, type ProjectRow } from '../projects/service';
 
 // Workspaces (V1 doc §8, §17): where a project's terminals run. Every project has a `main` one,
 // its root folder. Folder workspaces (P6-03) are a folder inside the project: a new one under
-// `workspaces/`, or one that already exists. Git worktrees come with P6-04. Every path goes
-// through the P6-05 guards, so it stays inside the project root.
+// `workspaces/`, or one that already exists. Worktree workspaces (P6-04) are a branch checked out
+// with `git worktree` in `workspaces/<name>`. Every path goes through the P6-05 guards, so it
+// stays inside the project root.
 
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 type Queryable = Pick<AppDatabase, 'select'>;
@@ -90,7 +100,8 @@ async function checkStatus(project: ProjectRow, workspace: WorkspaceRow): Promis
 /**
  * The project's workspaces, `main` first (created if missing), then by name. Each folder is
  * checked now and its status saved: `missing` when it's gone, `error` when it no longer passes
- * the path guards (e.g. swapped for a link out of the project).
+ * the path guards (e.g. swapped for a link out of the project). A worktree's branch is read
+ * again too, as another one may have been checked out in it.
  */
 export async function listWorkspaces(db: AppDatabase, projectId: string): Promise<WorkspaceRow[]> {
   const project = getProject(db, projectId);
@@ -105,11 +116,15 @@ export async function listWorkspaces(db: AppDatabase, projectId: string): Promis
   return Promise.all(
     [main, ...others].map(async (workspace) => {
       const status = await checkStatus(project, workspace);
-      if (status === workspace.status) {
+      let { branch } = workspace;
+      if (workspace.kind === 'worktree' && status === 'ready') {
+        branch = (await detectGitRepository(workspace.path))?.branch ?? null;
+      }
+      if (status === workspace.status && branch === workspace.branch) {
         return workspace;
       }
-      db.update(workspaces).set({ status }).where(eq(workspaces.id, workspace.id)).run();
-      return { ...workspace, status };
+      db.update(workspaces).set({ status, branch }).where(eq(workspaces.id, workspace.id)).run();
+      return { ...workspace, status, branch };
     }),
   );
 }
@@ -139,9 +154,12 @@ function assertPathFree(db: Queryable, path: string): void {
 }
 
 /**
- * A new folder workspace. With `path`: that existing folder inside the project (not the root —
- * that's `main`). Without: `workspaces/<name>` in the project, created if needed (a folder left
- * from an earlier workspace of that name is reused).
+ * A new workspace.
+ * - `folder` with `path`: that existing folder inside the project (not the root — that's
+ *   `main`). Without: `workspaces/<name>` in the project, created if needed (a folder left from an
+ *   earlier workspace of that name is reused).
+ * - `worktree`: `branch` checked out in a new worktree at `workspaces/<name>`; the project must be
+ *   a Git repository.
  */
 export async function createWorkspace(
   db: AppDatabase,
@@ -154,6 +172,10 @@ export async function createWorkspace(
   const { name } = request;
   assertNameFree(db, project.id, name);
 
+  if (request.kind === 'worktree') {
+    return createWorktreeWorkspace(db, project, request);
+  }
+
   let folder: string;
   if (request.path !== undefined) {
     folder = await resolveWorkspaceFolder(project.rootPath, request.path);
@@ -164,46 +186,164 @@ export async function createWorkspace(
       );
     }
   } else {
-    const planned = await planWorkspaceFolder(
-      project.rootPath,
-      join(WORKSPACES_FOLDER, slugify(name, 'workspace')),
-    );
+    const planned = await planWorkspaceFolder(project.rootPath, newFolderFor(name));
     assertPathFree(db, planned);
     await mkdir(planned, { recursive: true });
     // Checked again now that it exists: nothing on the way may have become a link meanwhile.
     folder = await resolveWorkspaceFolder(project.rootPath, planned);
   }
 
+  return insertWorkspace(db, project, { name, path: folder, kind: 'folder' });
+}
+
+/** `workspaces/<slug of name>`, relative to the project root. */
+function newFolderFor(name: string): string {
+  return join(WORKSPACES_FOLDER, slugify(name, 'workspace'));
+}
+
+function insertWorkspace(
+  db: AppDatabase,
+  project: ProjectRow,
+  values: Pick<WorkspaceRow, 'name' | 'path' | 'kind'> &
+    Partial<Pick<WorkspaceRow, 'branch' | 'repositoryId'>>,
+): WorkspaceRow {
   return db.transaction((tx) => {
     // Again inside the transaction, so two creates can't both pass.
-    assertNameFree(tx, project.id, name);
-    assertPathFree(tx, folder);
+    assertNameFree(tx, project.id, values.name);
+    assertPathFree(tx, values.path);
     return tx
       .insert(workspaces)
-      .values({ projectId: project.id, name, path: folder, kind: request.kind })
+      .values({ projectId: project.id, ...values })
       .returning()
       .get();
   });
 }
 
-/**
- * Removes a workspace's record; its folder and files stay on disk. CONFLICT for `main` and
- * while a terminal is running in it. Its ended terminals and agent runs go with it.
- */
-export function deleteWorkspace(db: AppDatabase, id: string): { id: string } {
+async function createWorktreeWorkspace(
+  db: AppDatabase,
+  project: ProjectRow,
+  request: Extract<CreateWorkspaceRequest, { kind: 'worktree' }>,
+): Promise<WorkspaceRow> {
+  const root = project.rootPath;
+  if (!(await detectGitRepository(root))) {
+    throw new IpcError(
+      'INVALID_REQUEST',
+      `“${project.name}” isn’t a Git repository, so it can’t have worktrees. Use a folder workspace instead.`,
+    );
+  }
+  const planned = await planWorkspaceFolder(root, newFolderFor(request.name));
+  assertPathFree(db, planned);
+  if (await exists(planned)) {
+    throw new IpcError(
+      'CONFLICT',
+      `${planned} already exists. Choose another name, or delete or move that folder.`,
+    );
+  }
+
+  await addWorktree(root, planned, request.branch, request.startPoint);
+  // Checked again now that it exists, as for folder workspaces.
+  const folder = await resolveWorkspaceFolder(root, planned);
+  await excludeFolder(root, WORKSPACES_FOLDER);
+
+  const repository = db
+    .select({ id: repositories.id })
+    .from(repositories)
+    .where(eq(repositories.projectId, project.id))
+    .get();
+  const branch = (await detectGitRepository(folder))?.branch ?? request.branch;
+  try {
+    return insertWorkspace(db, project, {
+      name: request.name,
+      path: folder,
+      kind: 'worktree',
+      branch,
+      repositoryId: repository?.id ?? null,
+    });
+  } catch (error) {
+    // Lost a race for the name or folder: take back the worktree just made (nothing is in it).
+    await removeWorktree(root, folder, true).catch(() => undefined);
+    throw error;
+  }
+}
+
+function findWorkspace(db: AppDatabase, id: string): WorkspaceRow {
   const workspace = db.select().from(workspaces).where(eq(workspaces.id, id)).get();
   if (!workspace) {
     throw new IpcError('NOT_FOUND', 'Workspace not found. It may have been deleted.');
   }
+  return workspace;
+}
+
+const LISTED_CHANGES = 20;
+
+/** Uncommitted changes in a worktree workspace whose folder is there; none for the others. */
+export async function getWorkspaceChanges(db: AppDatabase, id: string): Promise<WorkspaceChanges> {
+  const workspace = findWorkspace(db, id);
+  if (workspace.kind !== 'worktree') {
+    return { count: 0, files: [] };
+  }
+  const project = getProject(db, workspace.projectId);
+  if ((await checkStatus(project, workspace)) !== 'ready') {
+    return { count: 0, files: [] };
+  }
+  const changes = await uncommittedChanges(workspace.path);
+  return { count: changes.length, files: changes.slice(0, LISTED_CHANGES) };
+}
+
+/**
+ * Deletes a workspace. CONFLICT for `main` and while a terminal is running in it. Its ended
+ * terminals and agent runs go with it.
+ * - Folder workspaces: only the record; the folder and files stay on disk.
+ * - Worktrees: `git worktree remove` takes the folder away too (the branch stays). With
+ *   uncommitted changes, CONFLICT unless `force`. A folder that's gone is pruned from git; one
+ *   that no longer passes the path guards is left alone, and only the record goes.
+ */
+export async function deleteWorkspace(
+  db: AppDatabase,
+  id: string,
+  force = false,
+): Promise<{ id: string; removedFolder: boolean }> {
+  const workspace = findWorkspace(db, id);
   if (workspace.kind === 'main') {
     throw new IpcError('CONFLICT', 'The main workspace is the project folder itself and stays.');
   }
+  assertNoRunningTerminals(db, workspace);
+
+  let removedFolder = false;
+  if (workspace.kind === 'worktree') {
+    const project = getProject(db, workspace.projectId);
+    const status = await checkStatus(project, workspace);
+    if (status === 'ready') {
+      if (!force) {
+        const { length } = await uncommittedChanges(workspace.path);
+        if (length > 0) {
+          const changes = length === 1 ? '1 uncommitted change' : `${length} uncommitted changes`;
+          throw new IpcError(
+            'CONFLICT',
+            `“${workspace.name}” has ${changes}. Commit or discard them first, or delete it anyway.`,
+          );
+        }
+      }
+      // A terminal may have been started while git was busy.
+      assertNoRunningTerminals(db, workspace);
+      await removeWorktree(project.rootPath, workspace.path, force);
+      removedFolder = true;
+    } else if (status === 'missing') {
+      await pruneWorktrees(project.rootPath);
+    }
+  }
+
+  db.delete(workspaces).where(eq(workspaces.id, id)).run();
+  return { id, removedFolder };
+}
+
+function assertNoRunningTerminals(db: AppDatabase, workspace: WorkspaceRow): void {
   const running = db
     .select({ id: terminalSessions.id })
     .from(terminalSessions)
     .where(
       and(
-        eq(terminalSessions.workspaceId, id),
+        eq(terminalSessions.workspaceId, workspace.id),
         inArray(terminalSessions.status, ['starting', 'running']),
       ),
     )
@@ -215,6 +355,4 @@ export function deleteWorkspace(db: AppDatabase, id: string): { id: string } {
       `${count} running in “${workspace.name}”. Stop or close them before deleting it.`,
     );
   }
-  db.delete(workspaces).where(eq(workspaces.id, id)).run();
-  return { id };
 }
