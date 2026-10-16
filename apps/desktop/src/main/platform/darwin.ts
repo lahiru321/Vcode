@@ -72,12 +72,17 @@ function isAlive(pid: number): boolean {
   }
 }
 
-/** node-pty starts each terminal in its own session, so the PID is also the process group ID. */
+/**
+ * node-pty starts each terminal in its own session, so the PID is also the process group ID and
+ * the whole group is signalled. A process that leads no group of its own (not started by
+ * node-pty) gets the signal itself instead, rather than being taken for gone.
+ */
 async function killProcessTree(pid: number): Promise<void> {
   assertPid(pid);
-  const signalGroup = (signal: NodeJS.Signals): void => {
+  const target = isAlive(-pid) ? -pid : pid;
+  const signal = (name: NodeJS.Signals): void => {
     try {
-      process.kill(-pid, signal);
+      process.kill(target, name);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
         throw error;
@@ -85,13 +90,13 @@ async function killProcessTree(pid: number): Promise<void> {
     }
   };
 
-  signalGroup('SIGTERM');
+  signal('SIGTERM');
   const deadline = Date.now() + KILL_GRACE_MS;
-  while (isAlive(-pid) && Date.now() < deadline) {
+  while (isAlive(target) && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  if (isAlive(-pid)) {
-    signalGroup('SIGKILL');
+  if (isAlive(target)) {
+    signal('SIGKILL');
   }
 }
 

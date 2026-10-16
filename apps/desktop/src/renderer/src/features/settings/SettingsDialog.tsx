@@ -49,9 +49,15 @@ function SettingsForm() {
     };
   }, []);
 
+  /** Shown at once; main's answer replaces it, and a failure puts the old value back. */
   const change = (patch: Partial<Settings>) => {
+    const before = settings;
     setError(null);
-    invoke('settings:set', patch).then(setSettings, (err: unknown) => setError(errorMessage(err)));
+    setSettings((current) => current && { ...current, ...patch });
+    invoke('settings:set', patch).then(setSettings, (err: unknown) => {
+      setSettings(before);
+      setError(errorMessage(err));
+    });
   };
 
   if (!settings) {

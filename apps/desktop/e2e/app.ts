@@ -13,9 +13,12 @@ import { _electron, type ElectronApplication, type Page } from '@playwright/test
 const electronPath = createRequire(__filename)('electron') as string;
 const appDir = resolve(__dirname, '..');
 
-/** A new empty folder (real path: macOS's temp folder is behind a symlink). */
+/**
+ * A new empty folder, as the real path the app shows: macOS's temp folder is behind a symlink,
+ * and a Windows runner's is under an 8.3 name (RUNNER~1) that only the native realpath expands.
+ */
 export function tempFolder(prefix: string): string {
-  return realpathSync(mkdtempSync(join(tmpdir(), `vcode-e2e-${prefix}-`)));
+  return realpathSync.native(mkdtempSync(join(tmpdir(), `vcode-e2e-${prefix}-`)));
 }
 
 /** The part of the preload bridge the tests use (the page's `window.vcode`). */

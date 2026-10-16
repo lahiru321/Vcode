@@ -1,18 +1,20 @@
-import { copyFileSync, existsSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { FuseState, FuseV1Options, getCurrentFuseWire } from '@electron/fuses';
 import { describe, expect, it } from 'vitest';
 import { tempDir } from '../src/main/testing';
 import { applyFuses, FUSES } from './fuses';
 
 /**
- * Outside Electron, the `electron` package exports the path of its executable; it throws when
- * the binary wasn't downloaded (CI's unit-test job skips it).
+ * The Electron executable, read from the package's `path.txt` rather than by requiring it:
+ * since Electron 44.8 that starts a download when the binary is missing, and CI's unit-test job
+ * skips it on purpose. Null when it isn't there.
  */
 function findElectron(): string | null {
   try {
-    const path = createRequire(import.meta.url)('electron') as string;
+    const dir = dirname(createRequire(import.meta.url).resolve('electron/package.json'));
+    const path = join(dir, 'dist', readFileSync(join(dir, 'path.txt'), 'utf8').trim());
     return existsSync(path) ? path : null;
   } catch {
     return null;
