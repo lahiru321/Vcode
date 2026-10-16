@@ -2,7 +2,7 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { isRendererUrl, RENDERER_URL, rendererFile } from './renderer';
 
-// Absolute on every OS (C:pp\… or D:pp\… on Windows, /app/… elsewhere).
+// Absolute on every OS: the current drive's /app on Windows, /app elsewhere.
 const root = resolve('/app/out/renderer');
 
 describe('rendererFile', () => {
