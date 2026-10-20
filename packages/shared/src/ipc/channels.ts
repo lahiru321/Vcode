@@ -43,6 +43,7 @@ export const INVOKE_CHANNELS = [
   'dialog:pickFolder',
   'clipboard:writeText',
   'clipboard:paste',
+  'clipboard:saveImage',
 ] as const;
 
 /** Push channels (main → renderer, `webContents.send`). */

@@ -33,7 +33,9 @@ export function Sidebar() {
 
       <Separator className="bg-sidebar-border" />
 
-      <ScrollArea className="min-h-0 flex-1">
+      {/* Radix wraps the content in a `display: table` div that grows with a long name, which
+          scrolls the + buttons out of view; as a block it keeps the sidebar's width. */}
+      <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
         <nav className="flex flex-col gap-5 p-3">
           <SidebarSection title="Projects" actionLabel="Add project" onAction={startAdd}>
             <ProjectList />

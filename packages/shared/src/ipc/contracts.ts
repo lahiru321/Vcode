@@ -490,6 +490,9 @@ export const SetSettingsRequest = z
 /** A whole scrollback (5000 lines) of wide lines fits. */
 export const WriteClipboardRequest = z.strictObject({ text: z.string().max(4_000_000) });
 
+/** `path` is null when the clipboard holds no image. */
+export const SaveClipboardImageResponse = z.object({ path: z.string().nullable() });
+
 /** `path` is null when the user cancels the dialog. */
 export const PickFolderResponse = z.object({ path: z.string().nullable() });
 
@@ -578,6 +581,11 @@ export const invokeContracts = {
    * read the clipboard any other way.
    */
   'clipboard:paste': { request: NoPayload, response: z.null() },
+  /**
+   * Saves the clipboard's image as a PNG file and returns its path, which the terminal pastes
+   * as text (CLI agents attach an image from its path). Null when there's no image on it.
+   */
+  'clipboard:saveImage': { request: NoPayload, response: SaveClipboardImageResponse },
 } satisfies Record<InvokeChannel, { request: z.ZodType; response: z.ZodType }>;
 
 export const eventContracts = {

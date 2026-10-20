@@ -75,8 +75,8 @@ export interface TerminalControls {
   hasSelection: () => boolean;
   /** Puts the selection on the clipboard. */
   copy: () => Promise<void>;
-  /** Types the clipboard's text into the terminal (bracketed paste if the program asks for it);
-   * it takes focus first. */
+  /** Types the clipboard's text, or a saved copy of its image's path, into the terminal
+   * (bracketed paste if the program asks for it); it takes focus first. */
   paste: () => Promise<void>;
   selectAll: () => void;
   /** Clears the screen and scrollback in the view; the program keeps running. */
@@ -101,6 +101,44 @@ async function takeFocus(terminal: Terminal): Promise<boolean> {
     await new Promise((resolve) => requestAnimationFrame(resolve));
   }
   return has();
+}
+
+/**
+ * Shift+Enter sends ESC CR (what Claude Code's /terminal-setup binds in VS Code), which CLI
+ * agents read as "new line" rather than "submit". xterm.js alone sends a plain CR for it.
+ */
+function shiftEnterNewLine(terminal: Terminal, send: (data: string) => void): void {
+  terminal.attachCustomKeyEventHandler((event) => {
+    const shiftEnter =
+      event.key === 'Enter' && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
+    if (!shiftEnter) return true;
+    // xterm.js would act on the keydown and keypress; both are swallowed, the keydown sends.
+    if (event.type === 'keydown') send('\x1b\r');
+    event.preventDefault();
+    return false;
+  });
+}
+
+/**
+ * A paste with no text (an image on the clipboard) is ignored by xterm.js. main saves the image
+ * to a file instead and its path is pasted: CLI agents like Claude Code attach it as an image.
+ * Returns the cleanup.
+ */
+function pasteImagesAsPaths(terminal: Terminal, container: HTMLElement): () => void {
+  const onPaste = (event: ClipboardEvent): void => {
+    if (event.clipboardData?.getData('text/plain')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    invoke('clipboard:saveImage').then(
+      ({ path }) => {
+        if (path) terminal.paste(/\s/.test(path) ? `"${path}"` : path);
+      },
+      (error: unknown) => console.warn('Could not paste the image:', error),
+    );
+  };
+  // Capture: it runs before xterm.js's own paste handler on its textarea.
+  container.addEventListener('paste', onPaste, true);
+  return () => container.removeEventListener('paste', onPaste, true);
 }
 
 const FONT_FAMILY =
@@ -223,12 +261,15 @@ export function TerminalView({
     });
     observer.observe(container);
 
-    const input = terminal.onData((data) => {
+    const sendInput = (data: string): void => {
       // A very large paste is sent in pieces the PTY host accepts.
       for (let start = 0; start < data.length; start += MAX_TERMINAL_INPUT) {
         send({ type: 'input', data: data.slice(start, start + MAX_TERMINAL_INPUT) });
       }
-    });
+    };
+    const input = terminal.onData(sendInput);
+    shiftEnterNewLine(terminal, sendInput);
+    const stopImagePaste = pasteImagesAsPaths(terminal, container);
 
     openTerminalPort(terminalId).then(
       (opened) => {
@@ -265,6 +306,7 @@ export function TerminalView({
       cancelAnimationFrame(frame);
       observer.disconnect();
       input.dispose();
+      stopImagePaste();
       port?.close();
       onControlsRef.current?.(null);
       terminal.dispose();

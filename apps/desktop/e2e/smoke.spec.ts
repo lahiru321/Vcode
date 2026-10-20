@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { launchApp, removeFolder, tempFolder, type RunningApp } from './app';
@@ -40,6 +40,16 @@ test('starts with the main window and no errors', async () => {
   await expect(app.page.getByText('No projects yet')).toBeVisible();
   await expect(app.page.getByText(/Ready/)).toBeVisible();
   expect(app.errors).toEqual([]);
+});
+
+test('keeps the sidebar buttons in view with a long project name', async () => {
+  const root = join(folder('project'), 'a-project-folder-name-far-too-long-for-the-sidebar');
+  mkdirSync(root);
+  app = await launchApp(folder('data'));
+  await addProject(app, root);
+  const sidebar = (await app.page.locator('aside').boundingBox())!;
+  const add = (await app.page.getByRole('button', { name: 'Add project' }).boundingBox())!;
+  expect(add.x + add.width).toBeLessThanOrEqual(sidebar.x + sidebar.width);
 });
 
 test('runs a command in a real shell, and brings the layout back after a restart', async () => {
@@ -118,4 +128,61 @@ test('keeps settings and records actions in the audit log', async () => {
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText('Added folder workspace “Docs”');
   await expect(rows.nth(1)).toContainText('Added project “blog”');
+});
+
+test('pastes text as typed, and an image as the path of a saved copy', async () => {
+  const root = join(folder('project'), 'paste');
+  mkdirSync(root);
+  app = await launchApp(folder('data'));
+  const project = await addProject(app, root);
+  await app.page.keyboard.press('ControlOrMeta+Shift+T');
+  await expect
+    .poll(
+      async () => (await app!.call<unknown[]>('terminals:list', { projectId: project.id })).length,
+    )
+    .toBe(1);
+  await app.page.locator('.xterm').first().click();
+
+  // A program that records its raw input until it reads a `q`; `ready` once it's listening.
+  const record = `const fs=require('fs');process.stdin.setRawMode(true);let s='';process.stdin.on('data',d=>{s+=d;if(s.includes('q')){fs.writeFileSync('input.json',JSON.stringify(s));process.exit()}});fs.writeFileSync('ready','')`;
+  await app.page.keyboard.type(`node -e "${record}"`);
+  await app.page.keyboard.press('Enter');
+  await expect.poll(() => existsSync(join(root, 'ready'))).toBe(true);
+
+  // Edit → Paste, which Ctrl+V and the toolbar's Paste both come to; the clipboard is put back.
+  const paste = () =>
+    app!.electron.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]!.webContents.paste(),
+    );
+  const before = await app.electron.evaluate(({ clipboard }) => clipboard.readText());
+  try {
+    await app.electron.evaluate(({ clipboard }) => clipboard.writeText('typed '));
+    // paste() returns before the page has read the clipboard (and main has saved the image).
+    await paste();
+    await app.page.waitForTimeout(1_000);
+    await app.electron.evaluate(async ({ clipboard, ClipboardItem }) => {
+      // A 1×1 PNG.
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      const image = new Blob([png], { type: 'image/png' });
+      await clipboard.write([new ClipboardItem({ 'image/png': image })]);
+    });
+    await paste();
+    await app.page.waitForTimeout(1_000);
+  } finally {
+    await app.electron.evaluate(({ clipboard }, text) => clipboard.writeText(text), before);
+  }
+  await app.page.keyboard.type('q');
+
+  const file = join(root, 'input.json');
+  await expect.poll(() => existsSync(file)).toBe(true);
+  // Without the bracketed-paste markers, if the shell turned them on.
+  const input = (JSON.parse(readFileSync(file, 'utf8')) as string)
+    .replaceAll('\x1b[200~', '')
+    .replaceAll('\x1b[201~', '');
+  const match = /^typed "?(.+?\.png)"?q$/.exec(input);
+  expect(match, input).not.toBeNull();
+  expect(existsSync(match![1]!)).toBe(true);
 });
