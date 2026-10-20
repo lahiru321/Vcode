@@ -143,8 +143,9 @@ test('pastes text as typed, and an image as the path of a saved copy', async () 
     .toBe(1);
   await app.page.locator('.xterm').first().click();
 
-  // A program that records its raw input until it reads a `q`; `ready` once it's listening.
-  const record = `const fs=require('fs');process.stdin.setRawMode(true);let s='';process.stdin.on('data',d=>{s+=d;if(s.includes('q')){fs.writeFileSync('input.json',JSON.stringify(s));process.exit()}});fs.writeFileSync('ready','')`;
+  // A program that records its raw input until it reads a `#` (a temp path may hold any
+  // letter); `ready` once it's listening.
+  const record = `const fs=require('fs');process.stdin.setRawMode(true);let s='';process.stdin.on('data',d=>{s+=d;if(s.includes('#')){fs.writeFileSync('input.json',JSON.stringify(s));process.exit()}});fs.writeFileSync('ready','')`;
   await app.page.keyboard.type(`node -e "${record}"`);
   await app.page.keyboard.press('Enter');
   await expect.poll(() => existsSync(join(root, 'ready'))).toBe(true);
@@ -174,7 +175,7 @@ test('pastes text as typed, and an image as the path of a saved copy', async () 
   } finally {
     await app.electron.evaluate(({ clipboard }, text) => clipboard.writeText(text), before);
   }
-  await app.page.keyboard.type('q');
+  await app.page.keyboard.type('#');
 
   const file = join(root, 'input.json');
   await expect.poll(() => existsSync(file)).toBe(true);
@@ -182,7 +183,7 @@ test('pastes text as typed, and an image as the path of a saved copy', async () 
   const input = (JSON.parse(readFileSync(file, 'utf8')) as string)
     .replaceAll('\x1b[200~', '')
     .replaceAll('\x1b[201~', '');
-  const match = /^typed "?(.+?\.png)"?q$/.exec(input);
+  const match = /^typed "?(.+?\.png)"?#$/.exec(input);
   expect(match, input).not.toBeNull();
   expect(existsSync(match![1]!)).toBe(true);
 });
