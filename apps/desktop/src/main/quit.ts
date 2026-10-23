@@ -39,6 +39,35 @@ export function quitNow(): void {
   confirmed = true;
 }
 
+function runningAgents(): RunningAgent[] {
+  try {
+    return listRunningAgents(getDatabase());
+  } catch (err) {
+    log.warn({ err }, 'could not list running agents before quitting');
+    return [];
+  }
+}
+
+/**
+ * True if quitting may go ahead: no agents are running, or the user agreed to stop them. For
+ * quitting that has to know before it starts (installing an update).
+ */
+export async function confirmQuit(window: BrowserWindow | null): Promise<boolean> {
+  if (confirmed) {
+    return true;
+  }
+  const running = runningAgents();
+  if (running.length === 0) {
+    return true;
+  }
+  const options = quitPrompt(running);
+  const { response } =
+    window && window.isVisible()
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options);
+  return response === 0;
+}
+
 /**
  * For `before-quit`: true if the quit may go ahead now. Otherwise it is held, the user is asked
  * (when agents are running), and `app.quit()` is called again if they agree.
@@ -47,26 +76,15 @@ export function allowQuit(window: BrowserWindow | null): boolean {
   if (confirmed) {
     return true;
   }
-  let running: RunningAgent[] = [];
-  try {
-    running = listRunningAgents(getDatabase());
-  } catch (err) {
-    log.warn({ err }, 'could not list running agents before quitting');
-  }
-  if (running.length === 0) {
+  if (runningAgents().length === 0) {
     confirmed = true;
     return true;
   }
   if (!asking) {
     asking = true;
-    const options = quitPrompt(running);
-    const answer =
-      window && window.isVisible()
-        ? dialog.showMessageBox(window, options)
-        : dialog.showMessageBox(options);
-    void answer
-      .then(({ response }) => {
-        if (response === 0) {
+    void confirmQuit(window)
+      .then((agreed) => {
+        if (agreed) {
           confirmed = true;
           app.quit();
         }

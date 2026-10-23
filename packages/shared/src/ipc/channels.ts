@@ -5,6 +5,8 @@
 export const INVOKE_CHANNELS = [
   'app:getInfo',
   'app:showAbout',
+  'app:getUpdate',
+  'app:restartToUpdate',
   'projects:list',
   'projects:get',
   'projects:create',
@@ -47,7 +49,7 @@ export const INVOKE_CHANNELS = [
 ] as const;
 
 /** Push channels (main → renderer, `webContents.send`). */
-export const EVENT_CHANNELS = ['app:notice', 'app:command', 'agent:status'] as const;
+export const EVENT_CHANNELS = ['app:notice', 'app:command', 'app:update', 'agent:status'] as const;
 
 /**
  * Main → renderer, carrying a terminal's MessagePort (`webContents.postMessage` with a transfer

@@ -12,7 +12,7 @@ import { closeLogging, createLogger, initLogging, levelFromEnv } from './logging
 import { startNotifications } from './notifications';
 import { platform } from './platform';
 import { ptyHost } from './pty-host';
-import { allowQuit, handleWindowClose, quitNow } from './quit';
+import { allowQuit, confirmQuit, handleWindowClose, quitNow } from './quit';
 import { loadRenderer, registerRendererScheme, serveRenderer } from './renderer';
 import { applySecurityBaseline } from './security';
 import { trackTerminalSessions } from './terminals';
@@ -165,7 +165,11 @@ ${error instanceof Error ? error.message : String(error)}`,
 function startAutoUpdate(): void {
   if (!app.isPackaged) return;
   try {
-    updater = startUpdater(autoUpdater, () => tray?.refresh());
+    updater = startUpdater(autoUpdater, {
+      onChange: () => tray?.refresh(),
+      confirmQuit: () => confirmQuit(mainWindow),
+      quitNow,
+    });
   } catch (err) {
     log.error({ err }, 'could not start the updater');
   }
@@ -178,7 +182,7 @@ function startTray(window: BrowserWindow): void {
       () => app.quit(),
       {
         ready: () => updater?.state().ready ?? null,
-        restart: () => updater?.restartToUpdate(),
+        restart: () => void updater?.restartToUpdate(),
       },
     );
     tray.watchWindow(window);

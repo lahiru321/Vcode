@@ -53,6 +53,10 @@ export const AppCommand = z.discriminatedUnion('command', [
 ]);
 export type AppCommand = z.infer<typeof AppCommand>;
 
+/** Auto-update (P8-04): a downloaded version waiting for a restart, if any. */
+export const UpdateState = z.object({ ready: z.string().nullable() });
+export type UpdateState = z.infer<typeof UpdateState>;
+
 // Projects (V1 doc §20). Deleting a project removes its records, never files on disk.
 
 const ProjectName = z.string().trim().min(1, 'Name is required').max(100, 'Name is too long');
@@ -500,6 +504,13 @@ export const invokeContracts = {
   'app:getInfo': { request: NoPayload, response: AppInfo },
   /** The native About window (P8-02). */
   'app:showAbout': { request: NoPayload, response: z.null() },
+  /** `ready` is null in dev builds and until an update has downloaded; `app:update` follows it. */
+  'app:getUpdate': { request: NoPayload, response: UpdateState },
+  /**
+   * Quits (asking first when agents are running) and installs the downloaded update, then starts
+   * the new version. Nothing happens if there is none or the user cancels.
+   */
+  'app:restartToUpdate': { request: NoPayload, response: z.null() },
   'projects:list': { request: NoPayload, response: z.array(Project) },
   'projects:get': { request: ProjectIdRequest, response: Project },
   'projects:create': { request: CreateProjectRequest, response: Project },
@@ -591,6 +602,7 @@ export const invokeContracts = {
 export const eventContracts = {
   'app:notice': AppNotice,
   'app:command': AppCommand,
+  'app:update': UpdateState,
   'agent:status': AgentStatusEvent,
 } satisfies Record<EventChannel, z.ZodType>;
 

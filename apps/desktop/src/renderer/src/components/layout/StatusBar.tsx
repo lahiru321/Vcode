@@ -4,6 +4,7 @@ import { AgentStatusDot } from '@renderer/features/agents/AgentStatusBadge';
 import { invoke } from '@renderer/lib/ipc';
 import { cn } from '@renderer/lib/utils';
 import { useEffect, useState } from 'react';
+import { UpdateButton } from './UpdateButton';
 
 export function StatusBar({ className }: { className?: string }) {
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -22,11 +23,14 @@ export function StatusBar({ className }: { className?: string }) {
       )}
     >
       <AgentSummary />
-      {info && (
-        <span className="font-mono">
-          v{info.version} · Electron {info.versions.electron} · Node {info.versions.node}
-        </span>
-      )}
+      <div className="flex items-center gap-3">
+        <UpdateButton />
+        {info && (
+          <span className="font-mono">
+            v{info.version} · Electron {info.versions.electron} · Node {info.versions.node}
+          </span>
+        )}
+      </div>
     </footer>
   );
 }

@@ -52,6 +52,22 @@ test('keeps the sidebar buttons in view with a long project name', async () => {
   expect(add.x + add.width).toBeLessThanOrEqual(sidebar.x + sidebar.width);
 });
 
+test('offers Restart to update once an update has downloaded', async () => {
+  app = await launchApp(folder('data'));
+  await expect(app.page.getByText(/Ready/)).toBeVisible();
+  // A dev build has no updater, so nothing is offered until main says an update is ready.
+  await expect(app.page.getByTestId('update-button')).toHaveCount(0);
+  await app.electron.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send('app:update', { ready: '9.9.9' });
+    }
+  });
+  await expect(app.page.getByTestId('update-button')).toHaveText('Restart to update');
+  await expect(app.page.getByText('Vcode 9.9.9 is ready')).toBeVisible();
+  await expect(app.page.getByRole('button', { name: 'Restart now' })).toBeVisible();
+  expect(app.errors).toEqual([]);
+});
+
 test('runs a command in a real shell, and brings the layout back after a restart', async () => {
   const userData = folder('data');
   const root = join(folder('project'), 'shop');
