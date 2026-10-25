@@ -2,6 +2,7 @@ import type { Project } from '@vcode/shared';
 import {
   ArchiveRestore,
   Bot,
+  FileText,
   FolderGit2,
   GitBranch,
   MoreHorizontal,
@@ -17,6 +18,11 @@ import { useAgents } from '@renderer/features/agents/AgentsProvider';
 import { useProjects } from '@renderer/features/projects/ProjectsProvider';
 import { useRepository } from '@renderer/features/projects/useRepository';
 import { useWorkspaces } from '@renderer/features/workspaces/WorkspacesProvider';
+import {
+  MarkdownPane,
+  MarkdownViewerProvider,
+  useMarkdownViewer,
+} from '@renderer/features/markdown/MarkdownViewer';
 import { NewTerminalDialog } from '@renderer/features/terminals/NewTerminalDialog';
 import { TerminalGrid } from '@renderer/features/terminals/TerminalGrid';
 import {
@@ -48,11 +54,13 @@ function ProjectView({ project }: { project: Project }) {
   const agents = useAgents();
   const terminals = useProjectTerminals(project);
   const repository = useRepository(project);
+  const markdown = useMarkdownViewer(project);
   // Open: the New terminal dialog, starting in `workspaceId` (or main) when given.
   const [adding, setAdding] = useState<{ workspaceId?: string } | null>(null);
   const isArchived = project.status === 'archived';
   useShortcut('newTerminal', () => void terminals.create(), !isArchived);
   useShortcut('newTerminalDialog', () => setAdding({}), !isArchived);
+  useShortcut('openMarkdown', () => markdown.open());
 
   // Agents started from the sidebar open here. Archived projects don't run agents.
   const { registerLauncher } = agents;
@@ -115,6 +123,15 @@ function ProjectView({ project }: { project: Project }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            title={`Read a Markdown file in a pane beside the terminals (${shortcutLabel('openMarkdown')})`}
+            onClick={() => markdown.open()}
+          >
+            <FileText />
+            Open Markdown…
+          </Button>
           {isArchived && (
             <Button size="sm" variant="outline" onClick={() => void setArchived(project, false)}>
               <ArchiveRestore />
@@ -153,8 +170,17 @@ function ProjectView({ project }: { project: Project }) {
       </header>
 
       <RestoredBar terminals={terminals} archived={isArchived} />
-      {/* Mounted even when empty, so closing the last terminal is saved with the layout. */}
-      {terminals.loaded && <TerminalGrid terminals={terminals} watermark={NoTerminalsEmptyState} />}
+      <MarkdownViewerProvider value={markdown.open}>
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {/* Mounted even when empty, so closing the last terminal is saved with the layout. */}
+            {terminals.loaded && (
+              <TerminalGrid terminals={terminals} watermark={NoTerminalsEmptyState} />
+            )}
+          </div>
+          <MarkdownPane project={project} viewer={markdown} />
+        </div>
+      </MarkdownViewerProvider>
 
       <NewTerminalDialog
         open={adding !== null}

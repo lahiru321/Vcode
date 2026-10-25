@@ -15,7 +15,8 @@ export type ShortcutId =
   | 'previousPanel'
   | 'find'
   | 'copy'
-  | 'paste';
+  | 'paste'
+  | 'openMarkdown';
 
 interface Keys {
   mod: boolean;
@@ -34,6 +35,7 @@ export const SHORTCUTS: Record<ShortcutId, Keys & { description: string }> = {
   find: { mod: true, shift: true, key: 'F', description: 'Find' },
   copy: { mod: true, shift: true, key: 'C', description: 'Copy' },
   paste: { mod: true, shift: true, key: 'V', description: 'Paste' },
+  openMarkdown: { mod: true, shift: true, key: 'O', description: 'Open Markdown…' },
 };
 
 let isMac = false;

@@ -6,12 +6,13 @@ import {
 } from '@vcode/shared';
 import { invoke } from '@renderer/lib/ipc';
 import { openTerminalPort } from '@renderer/lib/terminal-port';
+import { findMarkdownPaths } from '@renderer/features/markdown/paths';
 import { blockClipboardSequences, confirmedLinkHandler } from './safety';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { Terminal, type ITheme } from '@xterm/xterm';
+import { Terminal, type IDisposable, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'react';
 
@@ -141,6 +142,25 @@ function pasteImagesAsPaths(terminal: Terminal, container: HTMLElement): () => v
   return () => container.removeEventListener('paste', onPaste, true);
 }
 
+/**
+ * Markdown file paths in the output (`docs/plan.md`, …) become links that open the file in the
+ * Markdown viewer. Paths wrapped across lines aren't found. Returns the cleanup.
+ */
+function markdownLinks(terminal: Terminal, open: (path: string) => void): IDisposable {
+  return terminal.registerLinkProvider({
+    provideLinks(y, callback) {
+      const line = terminal.buffer.active.getLine(y - 1)?.translateToString(true) ?? '';
+      const links = findMarkdownPaths(line).map(({ start, text }) => ({
+        range: { start: { x: start + 1, y }, end: { x: start + text.length, y } },
+        text,
+        decorations: { pointerCursor: true, underline: true },
+        activate: () => open(text),
+      }));
+      callback(links.length > 0 ? links : undefined);
+    },
+  });
+}
+
 const FONT_FAMILY =
   "'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, 'DejaVu Sans Mono', monospace";
 
@@ -153,6 +173,8 @@ interface TerminalViewProps {
   onExit: (exitCode: number) => void;
   /** Called with the terminal's controls once it is created, and with null when it goes. */
   onControls?: (controls: TerminalControls | null) => void;
+  /** Opens a Markdown file path clicked in the output. */
+  onOpenMarkdown?: (path: string) => void;
 }
 
 export function TerminalView({
@@ -161,15 +183,18 @@ export function TerminalView({
   focused,
   onExit,
   onControls,
+  onOpenMarkdown,
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<(() => void) | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const onExitRef = useRef(onExit);
   const onControlsRef = useRef(onControls);
+  const onOpenMarkdownRef = useRef(onOpenMarkdown);
   useEffect(() => {
     onExitRef.current = onExit;
     onControlsRef.current = onControls;
+    onOpenMarkdownRef.current = onOpenMarkdown;
   });
 
   useEffect(() => {
@@ -194,6 +219,7 @@ export function TerminalView({
     const search = new SearchAddon();
     terminal.loadAddon(search);
     terminal.loadAddon(new WebLinksAddon((_event, uri) => openLink(uri)));
+    const fileLinks = markdownLinks(terminal, (path) => onOpenMarkdownRef.current?.(path));
     terminal.open(container);
     try {
       const webgl = new WebglAddon();
@@ -307,6 +333,7 @@ export function TerminalView({
       observer.disconnect();
       input.dispose();
       stopImagePaste();
+      fileLinks.dispose();
       port?.close();
       onControlsRef.current?.(null);
       terminal.dispose();

@@ -43,6 +43,7 @@ export const INVOKE_CHANNELS = [
   'settings:get',
   'settings:set',
   'dialog:pickFolder',
+  'markdown:open',
   'clipboard:writeText',
   'clipboard:paste',
   'clipboard:saveImage',

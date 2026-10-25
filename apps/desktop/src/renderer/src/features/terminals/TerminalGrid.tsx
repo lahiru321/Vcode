@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu';
 import { AgentStatusBadge } from '@renderer/features/agents/AgentStatusBadge';
+import { useOpenMarkdown } from '@renderer/features/markdown/MarkdownViewer';
 import { shortcutLabel, useShortcut, type ShortcutId } from '@renderer/lib/shortcuts';
 import { useTerminalFocus } from '@renderer/lib/terminal-focus';
 import { cn } from '@renderer/lib/utils';
@@ -439,6 +440,7 @@ function EndedPanel({ terminal, onRestart }: { terminal: TerminalSession; onRest
 
 function TerminalPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
   const { terminals, actions, panels } = useGrid();
+  const openMarkdown = useOpenMarkdown();
   const [visible, setVisible] = useState(api.isVisible);
   const [active, setActive] = useState(api.isActive);
   const [controls, setControls] = useState<TerminalControls | null>(null);
@@ -480,6 +482,12 @@ function TerminalPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
             focused={active}
             onExit={(exitCode) => markExited(terminalId, exitCode)}
             onControls={setControls}
+            // Relative paths are taken from the terminal's folder.
+            onOpenMarkdown={
+              openMarkdown
+                ? (path) => openMarkdown(path, terminals.get(terminalId)?.cwd)
+                : undefined
+            }
           />
           {searching && controls && (
             <TerminalSearch controls={controls} onClose={() => setSearching(false)} />

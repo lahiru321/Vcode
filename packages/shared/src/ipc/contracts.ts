@@ -500,6 +500,30 @@ export const SaveClipboardImageResponse = z.object({ path: z.string().nullable()
 /** `path` is null when the user cancels the dialog. */
 export const PickFolderResponse = z.object({ path: z.string().nullable() });
 
+/** Largest Markdown file the viewer opens. */
+export const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
+
+/**
+ * A Markdown file to read. With no `path`, main asks the user to pick one (starting in the
+ * project folder). Otherwise `path` is absolute, or relative to `baseDir` (a terminal's folder,
+ * or the folder of the file that links to it) or else to the project root, and must be inside
+ * the project folder.
+ */
+export const OpenMarkdownRequest = z.strictObject({
+  projectId: Id,
+  path: z.string().trim().min(1).max(4096).optional(),
+  baseDir: z.string().max(4096).optional(),
+});
+export type OpenMarkdownRequest = z.infer<typeof OpenMarkdownRequest>;
+
+export const MarkdownFile = z.object({
+  /** Real, absolute path. */
+  path: z.string(),
+  content: z.string(),
+  modifiedAt: Timestamp,
+});
+export type MarkdownFile = z.infer<typeof MarkdownFile>;
+
 export const invokeContracts = {
   'app:getInfo': { request: NoPayload, response: AppInfo },
   /** The native About window (P8-02). */
@@ -585,6 +609,11 @@ export const invokeContracts = {
   'settings:get': { request: NoPayload, response: Settings },
   'settings:set': { request: SetSettingsRequest, response: Settings },
   'dialog:pickFolder': { request: NoPayload, response: PickFolderResponse },
+  /**
+   * Reads a Markdown file for the viewer; null when the user cancels the file dialog.
+   * INVALID_REQUEST if it isn't a Markdown file, is too large, or is outside the project.
+   */
+  'markdown:open': { request: OpenMarkdownRequest, response: MarkdownFile.nullable() },
   /** Puts text (a terminal's selection) on the clipboard. */
   'clipboard:writeText': { request: WriteClipboardRequest, response: z.null() },
   /**

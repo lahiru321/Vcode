@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { launchApp, removeFolder, tempFolder, type RunningApp } from './app';
@@ -202,4 +202,80 @@ test('pastes text as typed, and an image as the path of a saved copy', async () 
   const match = /^typed "?(.+?\.png)"?#$/.exec(input);
   expect(match, input).not.toBeNull();
   expect(existsSync(match![1]!)).toBe(true);
+});
+
+test('opens a Markdown path from terminal output in the viewer, and follows its links', async () => {
+  const root = join(folder('project'), 'notes');
+  mkdirSync(join(root, 'docs'), { recursive: true });
+  writeFileSync(join(root, 'README.md'), '# Read me\n\nBack to [the plan](docs/plan.md).\n');
+  writeFileSync(
+    join(root, 'docs', 'plan.md'),
+    [
+      '# The plan',
+      '',
+      '- [x] Done',
+      '- [ ] Next',
+      '',
+      '| Step | Who |',
+      '|---|---|',
+      '| 1 | Claude |',
+      '',
+      'See [the readme](../README.md).',
+      '',
+    ].join('\n'),
+  );
+  const outside = join(folder('outside'), 'secret.md');
+  writeFileSync(outside, '# Not this one');
+  app = await launchApp();
+  const project = await addProject(app, root);
+
+  // Paths the page names must be inside the project.
+  await expect(app.call('markdown:open', { projectId: project.id, path: outside })).rejects.toThrow(
+    /inside the project/,
+  );
+
+  await app.page.keyboard.press('ControlOrMeta+Shift+T');
+  await expect
+    .poll(async () =>
+      (await app!.call<{ status: string }[]>('terminals:list', { projectId: project.id })).map(
+        (t) => t.status,
+      ),
+    )
+    .toEqual(['running']);
+  await app.page.locator('.xterm').first().click();
+  await app.page.keyboard.type('echo docs/plan.md');
+  await app.page.keyboard.press('Enter');
+
+  // The terminal draws to a canvas. The echoed path starts a line (the prompt starts the others),
+  // so hover down the left edge until a link shows the pointer.
+  const screen = app.page.locator('.xterm-screen').first();
+  const box = (await screen.boundingBox())!;
+  const findLink = async (): Promise<{ x: number; y: number } | null> => {
+    for (let y = box.y + 2; y < box.y + Math.min(box.height, 240); y += 4) {
+      const point = { x: box.x + 10, y };
+      await app!.page.mouse.move(point.x, point.y);
+      if (await screen.evaluate((el) => el.classList.contains('xterm-cursor-pointer'))) {
+        return point;
+      }
+    }
+    return null;
+  };
+  let link: { x: number; y: number } | null = null;
+  await expect.poll(async () => (link = await findLink()), { timeout: 20_000 }).not.toBeNull();
+  await app.page.mouse.click(link!.x, link!.y);
+
+  const viewer = app.page.getByRole('complementary', { name: 'Markdown viewer' });
+  await expect(viewer.getByRole('heading', { level: 1, name: 'The plan' })).toBeVisible();
+  await expect(viewer.getByRole('cell', { name: 'Claude' })).toBeVisible();
+  await expect(viewer.getByRole('checkbox')).toHaveCount(2);
+
+  // A relative link opens the other file; an edit on disk shows up by itself.
+  await viewer.getByRole('link', { name: 'the readme' }).click();
+  await expect(viewer.getByRole('heading', { level: 1, name: 'Read me' })).toBeVisible();
+  writeFileSync(join(root, 'README.md'), '# Read me again\n');
+  await expect(viewer.getByRole('heading', { level: 1, name: 'Read me again' })).toBeVisible();
+
+  await viewer.getByRole('button', { name: 'Close' }).click();
+  await expect(viewer).toBeHidden();
+  expect(app.errors).toEqual([]);
 });

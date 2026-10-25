@@ -4,6 +4,7 @@ import { registerAuditHandlers } from './audit';
 import { registerClipboardHandlers } from './clipboard';
 import { registerCredentialHandlers } from './credentials';
 import { registerDialogHandlers } from './dialog';
+import { registerMarkdownHandlers } from './markdown';
 import { registerProjectHandlers } from './projects';
 import { assertAllChannelsHandled } from './registry';
 import { registerRepositoryHandlers } from './repositories';
@@ -21,6 +22,7 @@ export function registerIpcHandlers(): void {
   registerAgentHandlers();
   registerCredentialHandlers();
   registerDialogHandlers();
+  registerMarkdownHandlers();
   registerProjectHandlers();
   registerRepositoryHandlers();
   registerSettingsHandlers();
